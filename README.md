@@ -1,68 +1,65 @@
 # Keystone
 
-**Part of the Luma Color System.**
+Keystone is the technical grading hub in the Luma Color System. It handles primary balance, white balance, exposure/tone, color volume, gamut/neutral cleanup, and technical finishing. It is designed to stay pre-ODT.
 
-Primary balance, white balance, exposure/tone, color volume, gamut/neutral cleanup, and technical finishing.
+## Source
 
-## Current source
-
-- Version: **1.0-RC24**
+- Version: `1.0-RC24`
 - DCTL: `Keystone-v1.0-RC24-Metal-Collision-Fix.dctl`
-- License: **GPL-3.0-or-later**
+- Input: selected inside Keystone
+- Output: selected inside Keystone; remains pre-ODT
+- License: GPL-3.0-or-later
 - SHA-256: `66daa1c3c0dc1e58ff99d896a7064baf91215d4ca172b67259000d5c6225fa04`
 
-## Pipeline role
+Keystone contains an exact-match ME_Desatch-compatible module and therefore keeps GPL-3.0-or-later distribution terms.
 
-**Placement:** After optical/film-matrix preparation and before final creative look/ODT.
+## Placement
 
-**Input:** Multiple supported camera/grading spaces selected inside Keystone.
-
-**Output:** Returns to the selected grading space; designed to remain pre-ODT.
-
-Keystone contains an exact-match ME_Desatch-compatible module and therefore retains GPL-3.0-or-later distribution terms.
-
-## Luma Color System
-
-Current full-stack reference:
-
-`Camera/CST -> FilmMatrix -> Advanced Toner -> Lens / optical stage -> Keystone -> LookLab -> ODT`
+Use Keystone after WB/input prep, FilmMatrix, palette work, and optical/lens character. It should usually be the last technical DCTL before the ODT.
 
 Recommended Resolve node tree:
 
 1. Camera/CST or input transform
-2. [LookLab WB](https://github.com/wbrisenold/LookLab-WB) for source/target white balance and tint, when needed
+2. [LookLab WB](https://github.com/wbrisenold/LookLab-WB), if source/target white balance or tint correction is needed
 3. FilmMatrix or film-matrix prep
-4. [Advanced Toner](https://github.com/wbrisenold/AdvancedToner) for environmental palette and narrative color
+4. [Advanced Toner](https://github.com/wbrisenold/AdvancedToner) for palette, environment, and mood
 5. [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) for lens/optical presence
-6. **Keystone** for primary balance, tone, color volume, and cleanup
-7. LookLab creative/full-grade stage, when used
-8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX) as an optional look-LUT browser/audition node before ODT
-9. ODT/display transform
+6. Keystone for primary balance, tone, color volume, gamut handling, and cleanup
+7. ODT/display transform
+8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX), optional, for display-referred LUT browsing after the ODT
 
-The tools stay separate on purpose:
+In this published set, the only LookLab repo is `LookLab-WB`, and it is white-balance only.
 
-- **Advanced Toner** = palette and environment
-- **Keystone** = primary balance and technical grade
-- **LookLab** = final creative grade
+FilmMatrix credit: the PD FilmMatrix node in this tree refers to [`PD-LogC3-FilmMatrix.dctl`](https://github.com/mikaelsundell/photographic-dctls/blob/master/PD-LogC3-FilmMatrix.dctl) from Mikael Sundell's `photographic-dctls` repository. I did not make that DCTL. I only use it as a separate node in my Resolve node tree.
 
-Companion repositories in the same system: [Advanced Toner](https://github.com/wbrisenold/AdvancedToner), [LookLab WB](https://github.com/wbrisenold/LookLab-WB), [PresenceOFX](https://github.com/wbrisenold/PresenceOFX), and [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX).
+## Related Repositories
 
-See [`SYSTEM.md`](SYSTEM.md).
+- [LookLab WB](https://github.com/wbrisenold/LookLab-WB): source/target white balance and tint correction
+- [Advanced Toner](https://github.com/wbrisenold/AdvancedToner): scene-referred palette and environment toning
+- [PD-LogC3-FilmMatrix.dctl](https://github.com/mikaelsundell/photographic-dctls/blob/master/PD-LogC3-FilmMatrix.dctl): third-party FilmMatrix node used in the tree; not made by me
+- [PresenceOFX](https://github.com/wbrisenold/PresenceOFX): lens/optical presence OFX
+- [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX): folder-backed LUT browsing OFX, usually after ODT for Rec.709/display LUTs
 
 ## Install on macOS
 
-Run `scripts/INSTALL.command`. It installs the DCTL into:
+Run `scripts/INSTALL.command`. It installs the DCTL into Resolve's user LUT/DCTL folder under:
 
 `Luma Color System/Keystone`
 
-inside Resolve's user LUT/DCTL folder.
+Refresh Resolve's LUT list or restart Resolve after installing.
 
-## GitHub workflow
+## Validation and Releases
 
-Every push and pull request runs static DCTL validation. A `v*` tag creates a downloadable release ZIP automatically.
+Run static validation with:
 
-The validator includes an explicit UI/combo-symbol vs `__DEVICE__` function collision audit to catch the Metal namespace failure that previously affected Keystone.
+```bash
+python3 ci/validate_dctl.py
+```
 
-## Funding
+Every push and pull request runs the validator. A `v*` tag creates a release ZIP automatically.
 
-`.github/FUNDING.yml` is included as part of the standard repository template.
+## Disclaimer
+
+This tool was vibe coded with AI assistance. Treat it as an experimental grading tool, not a color-science reference implementation. Validate it on your footage, scopes, and delivery path before using it on paid or archival work.
+
+Creative defaults are intended to be mathematically neutral. Keystone is not an ODT and does not include a hidden display look.

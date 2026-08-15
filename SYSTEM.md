@@ -1,6 +1,6 @@
 # Luma Color System
 
-Keystone, LookLab, and Advanced Toner are separate tools with separate responsibilities. They are designed to work together without forcing every grade through every tool.
+LookLab WB, Advanced Toner, PresenceOFX, Keystone, and LUTManagerOFX are separate tools with separate responsibilities. They are designed to work together without forcing every grade through every tool.
 
 ## The three tools
 
@@ -10,14 +10,13 @@ Keystone, LookLab, and Advanced Toner are separate tools with separate responsib
 | **Keystone** | Technical balance, tone, color volume, gamut handling, and cleanup | Main grading hub |
 | **LookLab WB** | Source/target white balance and tint | Before FilmMatrix / palette work |
 | **PresenceOFX** | Lens/optical presence | Between palette work and Keystone |
-| **LUTManagerOFX** | Folder-backed LUT browsing / look audition | Optional look node before ODT |
-| **LookLab** | Full creative grade / finishing look | After Keystone, before ODT |
+| **LUTManagerOFX** | Folder-backed LUT browsing / look audition | Optional display-referred node after ODT |
 
 ## Recommended full stack
 
 For the current AWG3 / LogC3 film-matrix workflow:
 
-`Camera/CST -> FilmMatrix -> Advanced Toner -> Lens / optical stage -> Keystone -> LookLab -> ODT`
+`Camera/CST -> LookLab WB -> FilmMatrix -> Advanced Toner -> PresenceOFX -> Keystone -> ODT -> LUTManagerOFX`
 
 Resolve node tree:
 
@@ -27,19 +26,20 @@ Resolve node tree:
 4. [Advanced Toner](https://github.com/wbrisenold/AdvancedToner)
 5. [PresenceOFX](https://github.com/wbrisenold/PresenceOFX)
 6. [Keystone](https://github.com/wbrisenold/Keystone)
-7. LookLab creative/full-grade stage, when used
-8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX), optional for look LUT auditioning
-9. ODT/display transform
+7. ODT/display transform
+8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX), optional for Rec.709/display LUT auditioning
 
 Use only the tools the shot needs. A neutral technical shot may use Keystone only. A location-driven grade may use Advanced Toner + Keystone. A hero creative shot may use the full stack.
+
+FilmMatrix credit: the FilmMatrix node refers to [`PD-LogC3-FilmMatrix.dctl`](https://github.com/mikaelsundell/photographic-dctls/blob/master/PD-LogC3-FilmMatrix.dctl) from Mikael Sundell's `photographic-dctls` repository. I did not make that DCTL; I only use it in this node tree.
 
 ## Design rules
 
 - **Advanced Toner owns palette.**
 - **Keystone owns balance and technical grade behavior.**
-- **LookLab owns the final creative grade.**
 - Shot correction remains upstream of creative look design.
-- All three are intended to stay upstream of the display transform unless their documentation explicitly says otherwise.
+- LookLab WB, Advanced Toner, PresenceOFX, and Keystone stay upstream of the display transform.
+- LUTManagerOFX usually goes after the display transform because most look LUTs expect Rec.709/display-referred input.
 - Neutral/bypass behavior is a release requirement.
 
 ## Repository model
