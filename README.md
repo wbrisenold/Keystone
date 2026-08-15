@@ -27,13 +27,25 @@ Current full-stack reference:
 
 `Camera/CST -> FilmMatrix -> Advanced Toner -> Lens / optical stage -> Keystone -> LookLab -> ODT`
 
+Recommended Resolve node tree:
+
+1. Camera/CST or input transform
+2. [LookLab WB](https://github.com/wbrisenold/LookLab-WB) for source/target white balance and tint, when needed
+3. FilmMatrix or film-matrix prep
+4. [Advanced Toner](https://github.com/wbrisenold/AdvancedToner) for environmental palette and narrative color
+5. [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) for lens/optical presence
+6. **Keystone** for primary balance, tone, color volume, and cleanup
+7. LookLab creative/full-grade stage, when used
+8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX) as an optional look-LUT browser/audition node before ODT
+9. ODT/display transform
+
 The tools stay separate on purpose:
 
 - **Advanced Toner** = palette and environment
 - **Keystone** = primary balance and technical grade
 - **LookLab** = final creative grade
 
-Companion OFX tools in the same system: **PresenceOFX** provides the lens/optical presence stage, and **LUTManagerOFX** provides folder-backed LUT browsing for look management.
+Companion repositories in the same system: [Advanced Toner](https://github.com/wbrisenold/AdvancedToner), [LookLab WB](https://github.com/wbrisenold/LookLab-WB), [PresenceOFX](https://github.com/wbrisenold/PresenceOFX), and [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX).
 
 See [`SYSTEM.md`](SYSTEM.md).
 
