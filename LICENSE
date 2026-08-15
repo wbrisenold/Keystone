@@ -1,0 +1,12 @@
+GNU GENERAL PUBLIC LICENSE
+
+This repository is licensed under GPL-3.0-or-later.
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Keystone's DCTL source header documents the GPL-covered exact-match
+ME_Desatch-compatible integration. The DCTL source is the authoritative
+provenance notice for that integration.
+
+Full GPL v3 text:
+https://www.gnu.org/licenses/gpl-3.0.txt
