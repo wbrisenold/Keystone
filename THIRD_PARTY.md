@@ -4,7 +4,7 @@ Keystone is distributed under GPL-3.0-or-later. It incorporates or adapts work f
 
 ## ME_Desatch / Moaz Elgabry DCTLs
 
-Keystone's encoded-output desaturation module is matched to `ME_Desatch.dctl` from the `MoazElgabry/DCTLs` repository at commit:
+Keystone's selective-desaturation compatibility module is matched to `ME_Desatch.dctl` from the `MoazElgabry/DCTLs` repository at commit:
 
 `5e57387d486e82e416cf25bc8a95aad5e7f33c7a`
 
@@ -14,7 +14,7 @@ Because Keystone combines GPL-covered code with the rest of the DCTL, Keystone i
 
 ## Primera Suite / Geoff Smith
 
-Keystone's primary Exposure, Black Point, Shadows, Roll Off, and rolling-contrast equations are derived from Primera Suite v0.5.5. RC26 retains Keystone's replacement of Primera's original highlight-gain equation with Keystone's own continuous/monotonic version after production testing found a discontinuity at code value 1.0.
+Keystone's primary Exposure, Black Point, Shadows, Roll Off, and rolling-contrast equations are derived from Primera Suite v0.5.5. RC27 retains Keystone's replacement of Primera's original highlight-gain equation with Keystone's own continuous/monotonic version after production testing found a discontinuity at code value 1.0.
 
 Primera Suite is licensed under the MIT License:
 
@@ -42,9 +42,9 @@ SOFTWARE.
 
 ## Film Negative Space CST / Dec. 18 Studios
 
-Keystone RC26's optional internal Negative Space uses the publicly documented processing model of Dec. 18 Studios' Film Negative Space CST as a behavioral/reference concept: scene-linear decode, middle-gray relocation, independent contrast above/below the pivot, printer-light-style density controls, grading in the remapped space, and inverse return.
+Keystone RC27's permanent internal Negative Space tone stage uses the publicly documented processing model of Dec. 18 Studios' Film Negative Space CST as a behavioral/reference concept: scene-linear decode, middle-gray relocation, independent contrast above/below the pivot, printer-light-style density controls, grading in the remapped space, and inverse return.
 
-Keystone does **not** contain or redistribute the Film Negative Space CST DCTL/DCTLE source or release asset. The RC26 implementation was independently written for Keystone from the public documentation and validated as its own reversible transform. This is attribution for the workflow concept/reference, not a code-license dependency.
+Keystone does **not** contain or redistribute the Film Negative Space CST DCTL/DCTLE source or release asset. The RC27 implementation was independently written for Keystone from the public documentation and validated as its own reversible transform. This is attribution for the workflow concept/reference, not a code-license dependency.
 
 Reference project: `https://github.com/Dec18studios/Film-Negative-Space-CST-DCTL`
 Documentation: `https://tools.dec18studios.com/color-grading-tools/film-negative-space-cst/`

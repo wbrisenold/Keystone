@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0-RC27
+
+- Made Keystone's internal Film Negative Space tone-development architecture permanent and removed the user-facing Off/Internal mode.
+- Fixed printer lights: R/G/B are now a real grade inside the negative sandwich and are no longer canceled by the inverse transform.
+- Fixed the neutral fast path so printer-light moves cannot be skipped.
+- Fixed the tone architecture: Exposure, Black, Contrast, Pivot, Shadows, Highlights and Roll Off now operate directly in negative-response values instead of re-encoding that novel space through the selected camera/log transfer.
+- Moved Chroma, Vibrance, Hue and Skin outside Negative Space, back into the normal scene-referred color domain.
+- Removed `Color / Mid Chroma` to eliminate overlapping general-saturation behavior.
+- Retained all seven ME_Desatch controls. Moved the exact module into a controlled native-working-transfer encode/apply/decode substage after Negative Space EXIT and before output cleanup.
+- Added a final catastrophic-only scene ceiling before output encode for extreme legal multi-control combinations.
+- Added behavioral gates for live printer lights, color/FNS separation, exact standalone ME_Desatch parity, negative-response monotonicity and 2.7 million randomized transforms.
+- Retained RC25 monotonic Highlights and transfer-aware catastrophic-negative safety.
+
 ## 1.0-RC26
 
 - Added optional `Negative Space / Mode = Internal Sandwich`.
