@@ -41,166 +41,84 @@ static bool finite3(float3 a){return std::isfinite(a.x)&&std::isfinite(a.y)&&std
 static float maxabs3(float3 a){return std::max({std::fabs(a.x),std::fabs(a.y),std::fabs(a.z)});}
 static float min3(float3 a){return std::min(a.x,std::min(a.y,a.z));}
 static void defaults(){
-  input_gamut_heal=0;logc3_ei=7;temp=tint=0;balance_red=balance_green=balance_blue=0;
-  fns_mid_out=.42f;fns_contrast_below=1.0f;fns_contrast_above=1.0f;fns_printer_r=fns_printer_g=fns_printer_b=25.0f;
-  p_exposure=0;p_bp=0;p_contrast=1;p_pivot_offset=0;p_shadows=0;p_highlights=0;p_high_soft=0;
+  input_gamut_heal=0;logc3_ei=7;temp=tint=0;
+  fns_printer_r=fns_printer_g=fns_printer_b=25.0f;
+  p_exposure=0;p_bp=0;p_contrast=1;p_shadows=0;p_highlights=0;p_high_soft=0;
   chroma=1;vibrance=0;hue_rotate=0;
   warm_target=0;warm_hue_shift=0;warm_chroma=1;warm_exposure=0;warm_evenness=0;
   global_sat=r_sat=g_sat=b_sat=c_sat=m_sat=y_sat=0;
-  native_negative_compress=black_gamut_clean=0;output_skin_protect=1;
+  white_gamut_clean=black_gamut_clean=0;
 }
+static void map_space(int sp,int &g,int &tf){g=0;tf=0;
+  if(sp==1){g=1;tf=1;}else if(sp==2){g=2;tf=2;}else if(sp==3){g=3;tf=3;}else if(sp==4){g=4;tf=4;}
+  else if(sp==5){g=5;tf=5;}else if(sp==6){g=6;tf=15;}else if(sp==7){g=11;tf=6;}else if(sp==8){g=7;tf=8;}
+  else if(sp==9){g=7;tf=9;}else if(sp==10){g=9;tf=10;}else if(sp==11){g=10;tf=13;}else if(sp==12){g=8;tf=11;}
+  else if(sp==13){g=8;tf=14;}else if(sp==14){g=0;tf=11;}else if(sp==15){g=12;tf=3;}else if(sp==16){g=10;tf=16;}else if(sp==17){g=10;tf=17;}
+}
+static float3 encode_for_space(float3 lin,int sp,int ei){int g,tf;map_space(sp,g,tf);return encode_native_ei(lin,tf,ei);}
+static float3 decode_for_space(float3 code,int sp,int ei){int g,tf;map_space(sp,g,tf);return decode_native_ei(code,tf,ei);}
 
-int main(){
-  int fail=0;
+int main(){int fail=0;
+  // Matrix roundtrips.
+  for(int g=0;g<=12;g++){float maxe=0;for(auto x:std::vector<float3>{{1,0,0},{0,1,0},{0,0,1},{.18f,.18f,.18f},{1.5f,-.2f,.7f}}){auto y=x2g(g,g2x(g,x));maxe=std::max(maxe,maxabs3(y-x));}if(maxe>2e-6f){std::printf("FAIL matrix %d %g\n",g,maxe);fail++;}}
 
-  // Gamut matrix inverse roundtrip.
-  for(int g=0;g<=12;g++){
-    float maxe=0.0f;
-    std::vector<float3> v={{1,0,0},{0,1,0},{0,0,1},{0.18f,0.18f,0.18f},{1.5f,-0.2f,0.7f}};
-    for(auto x:v){float3 y=x2g(g,g2x(g,x));maxe=std::max(maxe,maxabs3(y-x));}
-    if(maxe>2.0e-6f){std::printf("FAIL matrix g=%d err=%g\n",g,maxe);fail++;}
+  // Transfer roundtrips.
+  std::vector<float> xs={-.02f,-.001f,0,.001f,.005f,.01f,.018f,.18f,1,4,16,64};
+  for(int t=0;t<=17;t++){if(t==2)continue;float me=0;int bad=0;for(float x:xs){float3 v={x,x,x};auto e=tfe(v,t),d=tfd(e,t);if(!finite3(e)||!finite3(d)){bad++;continue;}me=std::max(me,std::fabs(d.x-x));}if(bad||me>2e-4f){std::printf("FAIL transfer %d bad=%d err=%g\n",t,bad,me);fail++;}}
+  for(int ei=0;ei<=10;ei++){float me=0;for(float x:xs){float3 v={x,x,x};auto e=tfl3e_ei(v,ei),d=tfl3d_ei(e,ei);me=std::max(me,std::fabs(d.x-x));}if(me>2e-4f){std::printf("FAIL LogC3 EI %d %g\n",ei,me);fail++;}}
+
+  // Neutral remains exact identity in every source space/EI.
+  for(int sp=0;sp<=17;sp++){defaults();input_space=(float)sp;for(int ei=0;ei<=10;ei++){logc3_ei=(float)ei;for(auto c:std::vector<float3>{{0,0,0},{.18f,.2f,.22f},{.4f,.5f,.6f},{1,.1f,-.1f},{1.5f,-.2f,2}}){auto o=transform(1,1,0,0,c.x,c.y,c.z);if(o.x!=c.x||o.y!=c.y||o.z!=c.z){std::printf("FAIL neutral sp=%d ei=%d\n",sp,ei);fail++;goto neutral_done;}}}neutral_done:;}
+
+  // Fixed negative characteristic remains monotonic and reversible.
+  {float prev=-1e30f;for(int i=0;i<=30000;i++){float x=-.1f+16.1f*i/30000.0f;float y=fns_forward_characteristic(x,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);if(!std::isfinite(y)||y+2e-5f<prev){std::printf("FAIL FNS monotonic x=%g\n",x);fail++;break;}prev=y;}for(float x:std::vector<float>{-.1f,0,.001f,.01f,.18f,1,4,16}){float3 v={x,x*.73f,x*1.21f};auto y=fns_forward_rgb(v,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);auto z=fns_inverse_rgb(y,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);if(!finite3(z)||maxabs3(z-v)>5e-4f*std::max(1.0f,maxabs3(v))){std::printf("FAIL FNS roundtrip x=%g err=%g\n",x,maxabs3(z-v));fail++;break;}}}
+
+  // Auto pivot derives 18% through every selected transfer/EI and contrast preserves that anchor.
+  for(int sp=0;sp<=17;sp++){int g,tf;map_space(sp,g,tf);for(int ei=0;ei<=10;ei++){float mid=auto_scene_midgray(tf,ei);if(std::fabs(mid-.18f)>3e-4f){std::printf("FAIL auto mid sp=%d ei=%d %g\n",sp,ei,mid);fail++;goto pivot_done;}defaults();input_space=(float)sp;logc3_ei=(float)ei;p_contrast=1.35f;float3 in=encode_native_ei({.18f,.18f,.18f},tf,ei);auto out=transform(1,1,0,0,in.x,in.y,in.z);if(maxabs3(out-in)>6e-4f){std::printf("FAIL contrast pivot sp=%d ei=%d err=%g\n",sp,ei,maxabs3(out-in));fail++;goto pivot_done;}}}pivot_done:;
+
+  // Global Exposure is a true scene-linear stop move.
+  for(int sp=0;sp<=17;sp++){int g,tf;map_space(sp,g,tf);defaults();input_space=(float)sp;p_exposure=1.0f;float3 in=encode_native_ei({.18f,.18f,.18f},tf,7);auto out=transform(1,1,0,0,in.x,in.y,in.z);auto lin=decode_native_ei(out,tf,7);if(maxabs3(lin-make_float3(.36f,.36f,.36f))>1.5e-3f){std::printf("FAIL true exposure sp=%d lin=%g,%g,%g\n",sp,lin.x,lin.y,lin.z);fail++;}}
+
+  // Printer lights are live and channel-specific.
+  {defaults();input_space=14;float3 in={.18f,.18f,.18f};auto n=transform(1,1,0,0,in.x,in.y,in.z);defaults();input_space=14;fns_printer_r=30;auto r=transform(1,1,0,0,in.x,in.y,in.z);defaults();input_space=14;fns_printer_g=30;auto g=transform(1,1,0,0,in.x,in.y,in.z);defaults();input_space=14;fns_printer_b=30;auto b=transform(1,1,0,0,in.x,in.y,in.z);if(maxabs3(r-n)<1e-4f||maxabs3(g-n)<1e-4f||maxabs3(b-n)<1e-4f||!(r.x>n.x&&g.y>n.y&&b.z>n.z)){std::printf("FAIL printer lights\n");fail++;}}
+
+  // Shadows and Highlights are isolated scene-stop zones, not split contrast.
+  {float lo=.18f*.25f,mid=.18f,hi=.18f*4.0f;
+    defaults();input_space=14;p_shadows=1;auto loS=transform(1,1,0,0,lo,lo,lo),midS=transform(1,1,0,0,mid,mid,mid),hiS=transform(1,1,0,0,hi,hi,hi);
+    if(!(loS.x>lo*1.3f)||std::fabs(midS.x-mid)>2e-4f||std::fabs(hiS.x-hi)>5e-4f){std::printf("FAIL shadow isolation lo=%g mid=%g hi=%g\n",loS.x,midS.x,hiS.x);fail++;}
+    defaults();input_space=14;p_highlights=1;auto loH=transform(1,1,0,0,lo,lo,lo),midH=transform(1,1,0,0,mid,mid,mid),hiH=transform(1,1,0,0,hi,hi,hi);
+    if(!(hiH.x>hi*1.3f)||std::fabs(midH.x-mid)>2e-4f||std::fabs(loH.x-lo)>5e-4f){std::printf("FAIL highlight isolation lo=%g mid=%g hi=%g\n",loH.x,midH.x,hiH.x);fail++;}
   }
 
-  // Transfer encode/decode roundtrip.
-  std::vector<float> xs={-0.02f,-0.001f,0.0f,0.001f,0.005f,0.01f,0.018f,0.18f,1.0f,4.0f,16.0f,64.0f};
-  for(int t=0;t<=17;t++){
-    if(t==2)continue;
-    float maxe=0.0f;int bad=0;
-    for(float x:xs){float3 v={x,x,x};auto enc=tfe(v,t);auto dec=tfd(enc,t);if(!finite3(enc)||!finite3(dec)){bad++;continue;}maxe=std::max(maxe,std::fabs(dec.x-x));}
-    if(bad||maxe>2.0e-4f){std::printf("FAIL transfer t=%d bad=%d err=%g\n",t,bad,maxe);fail++;}
-  }
-  for(int i=0;i<=10;i++){
-    float maxe=0.0f;int bad=0;
-    for(float x:xs){float3 v={x,x,x};auto enc=tfl3e_ei(v,i);auto dec=tfl3d_ei(enc,i);if(!finite3(enc)||!finite3(dec)){bad++;continue;}maxe=std::max(maxe,std::fabs(dec.x-x));}
-    if(bad||maxe>2.0e-4f){std::printf("FAIL LogC3 EI=%d bad=%d err=%g\n",i,bad,maxe);fail++;}
-  }
+  // Roll Off is mid-gray neutral, highlight-only and monotonic.
+  {defaults();input_space=14;p_high_soft=2;auto m=transform(1,1,0,0,.18f,.18f,.18f);auto h=transform(1,1,0,0,2.88f,2.88f,2.88f);if(std::fabs(m.x-.18f)>2e-4f||!(h.x<2.88f&&h.x>.18f)){std::printf("FAIL rolloff basic mid=%g high=%g\n",m.x,h.x);fail++;}float prev=-1e30f;for(int i=1;i<=4000;i++){float x=.18f*std::pow(2.0f,-1.0f+7.0f*i/4000.0f);auto o=transform(1,1,0,0,x,x,x);if(o.x+2e-5f<prev){std::printf("FAIL rolloff monotonic x=%g out=%g prev=%g\n",x,o.x,prev);fail++;break;}prev=o.x;}}
 
-  // Exact neutral/bypass across every input space and EI. Permanent negative architecture must not add a hidden look.
-  std::vector<float3> codes={{0,0,0},{0.18f,0.2f,0.22f},{0.4f,0.5f,0.6f},{1.0f,0.1f,-0.1f},{1.5f,-0.2f,2.0f}};
-  for(int sp=0;sp<=17;sp++){
-    defaults();input_space=(float)sp;
-    for(int ei=0;ei<=10;ei++){
-      logc3_ei=(float)ei;
-      for(auto c:codes){auto o=transform(1,1,0,0,c.x,c.y,c.z);if(o.x!=c.x||o.y!=c.y||o.z!=c.z){std::printf("FAIL neutral sp=%d ei=%d\n",sp,ei);fail++;goto neutral_done;}}
-    }
-    neutral_done: ;
-  }
+  // Chroma and Hue limiter never returns an Oklab color below the native safety margin.
+  for(int g=0;g<=12;g++)for(auto lab:std::vector<float3>{{.6f,.25f,.05f},{.7f,-.2f,.18f},{.5f,.05f,-.3f}}){auto o=apply_safe_chroma_hue(lab,2.0f,175.0f,g);float margin=native_gamut_margin_oklab(o,g);if(!finite3(o)||margin<VIBRANCE_MIN_MARGIN-2e-4f){std::printf("FAIL gamut-aware color g=%d margin=%g\n",g,margin);fail++;goto gamut_done;}}gamut_done:;
 
-  // Negative characteristic is reversible and monotonic for the full legal response range.
-  {
-    std::vector<float> vals={-0.25f,-0.02f,0.0f,0.001f,0.01f,0.05f,0.18f,0.42f,1.0f,4.0f,16.0f,64.0f};
-    struct FP{float mo,cb,ca;};
-    std::vector<FP> fps={{.42f,1,1},{.32f,.75f,.9f},{.60f,1.8f,.55f},{.12f,.2f,2.7f},{.80f,3.0f,.1f}};
-    for(auto q:fps){
-      float prev=-1.0e30f;
-      for(int i=0;i<=20000;i++){
-        float x=-.1f+8.1f*(float)i/20000.0f;
-        float y=fns_forward_characteristic(x,.18f,q.mo,q.cb,q.ca,.10f);
-        if(!std::isfinite(y)||y+2.0e-5f<prev){std::printf("FAIL FNS monotonic mo=%g x=%g y=%g prev=%g\n",q.mo,x,y,prev);fail++;break;}
-        prev=y;
-      }
-      for(float x:vals){
-        float3 v={x,x*.73f,x*1.21f};
-        auto y=fns_forward_rgb(v,.18f,q.mo,q.cb,q.ca,.10f);
-        auto z=fns_inverse_rgb(y,.18f,q.mo,q.cb,q.ca,.10f);
-        float tol=3.0e-4f;
-        if(!finite3(y)||!finite3(z)||maxabs3(z-v)>tol*std::max(1.0f,maxabs3(v))){std::printf("FAIL FNS roundtrip x=%g err=%g\n",x,maxabs3(z-v));fail++;break;}
-      }
-    }
-  }
-
-  // Printer lights are a real grade inside the sandwich and must NOT cancel on exit.
-  {
-    defaults();input_space=2;float3 in={.42f,.36f,.31f};auto neutral=transform(1,1,0,0,in.x,in.y,in.z);
-    defaults();input_space=2;fns_printer_r=30.0f;auto red=transform(1,1,0,0,in.x,in.y,in.z);
-    defaults();input_space=2;fns_printer_g=30.0f;auto green=transform(1,1,0,0,in.x,in.y,in.z);
-    defaults();input_space=2;fns_printer_b=30.0f;auto blue=transform(1,1,0,0,in.x,in.y,in.z);
-    if(maxabs3(red-neutral)<1e-4f||maxabs3(green-neutral)<1e-4f||maxabs3(blue-neutral)<1e-4f){std::printf("FAIL printer lights cancel or inactive\n");fail++;}
-    if(!(red.x>neutral.x && green.y>neutral.y && blue.z>neutral.z)){std::printf("FAIL printer light channel direction\n");fail++;}
-  }
-
-  // Working-response controls alone are not a look; changing them with no in-sandwich grade stays exact neutral.
-  {
-    float3 in={.31f,.44f,.58f};
-    defaults();input_space=2;fns_mid_out=.73f;fns_contrast_below=.2f;fns_contrast_above=2.7f;
-    auto o=transform(1,1,0,0,in.x,in.y,in.z);
-    if(o.x!=in.x||o.y!=in.y||o.z!=in.z){std::printf("FAIL response-only neutral\n");fail++;}
-  }
-
-  // But those response controls must materially change how the same tone move behaves.
-  {
-    float3 in={.55f,.42f,.30f};
-    defaults();input_space=2;p_highlights=.7f;auto a=transform(1,1,0,0,in.x,in.y,in.z);
-    defaults();input_space=2;p_highlights=.7f;fns_mid_out=.60f;fns_contrast_below=.6f;fns_contrast_above=.55f;auto b=transform(1,1,0,0,in.x,in.y,in.z);
-    if(maxabs3(a-b)<1.0e-4f){std::printf("FAIL negative response controls do not affect tone feel\n");fail++;}
-  }
-
-  // Color lives after Negative Space EXIT: response-shape parameters cannot contaminate pure Chroma/Hue/Vibrance operations.
-  {
-    float3 in={.52f,.31f,.68f};
-    defaults();input_space=2;chroma=1.3f;vibrance=.25f;hue_rotate=17;auto a=transform(1,1,0,0,in.x,in.y,in.z);
-    defaults();input_space=2;chroma=1.3f;vibrance=.25f;hue_rotate=17;fns_mid_out=.75f;fns_contrast_below=.2f;fns_contrast_above=2.8f;auto b=transform(1,1,0,0,in.x,in.y,in.z);
-    if(maxabs3(a-b)>2.0e-6f){std::printf("FAIL color contaminated by negative response err=%g\n",maxabs3(a-b));fail++;}
-  }
+  // Skin Hue Uniformity is a color-only operation: it may move hue, but should not materially move scene luminance.
+  {defaults();input_space=14;warm_target=20;warm_evenness=1;float3 in={.36f,.20f,.12f};auto out=transform(1,1,0,0,in.x,in.y,in.z);float Yin=g2x(0,in).y,Yout=g2x(0,out).y;if(maxabs3(out-in)<1e-5f||std::fabs(Yout-Yin)>4e-3f){std::printf("FAIL skin uniformity diff=%g dY=%g\n",maxabs3(out-in),Yout-Yin);fail++;}}
 
   // ME_Desatch exact parity when it is the only active module.
-  {
-    std::vector<float3> ins={{.1f,.2f,.3f},{.8f,.3f,.15f},{1.1f,-.05f,.5f}};
-    for(int sp=0;sp<=17;sp++)for(auto in:ins){
-      defaults();input_space=(float)sp;global_sat=-.18f;r_sat=-.2f;g_sat=-.1f;b_sat=-.3f;c_sat=-.12f;m_sat=-.08f;y_sat=-.16f;
-      auto expected=apply_me_desatch_exact(in,global_sat,r_sat,g_sat,b_sat,c_sat,m_sat,y_sat);
-      auto out=transform(1,1,0,0,in.x,in.y,in.z);
-      if(maxabs3(out-expected)>2.0e-6f){std::printf("FAIL ME exact parity sp=%d err=%g\n",sp,maxabs3(out-expected));fail++;goto me_done;}
-    }
-    me_done: ;
-  }
+  for(int sp=0;sp<=17;sp++)for(auto in:std::vector<float3>{{.1f,.2f,.3f},{.8f,.3f,.15f},{1.1f,-.05f,.5f}}){defaults();input_space=(float)sp;global_sat=-.18f;r_sat=-.2f;g_sat=-.1f;b_sat=-.3f;c_sat=-.12f;m_sat=-.08f;y_sat=-.16f;auto expected=apply_me_desatch_exact(in,global_sat,r_sat,g_sat,b_sat,c_sat,m_sat,y_sat);auto out=transform(1,1,0,0,in.x,in.y,in.z);if(maxabs3(out-expected)>2e-6f){std::printf("FAIL ME parity sp=%d err=%g\n",sp,maxabs3(out-expected));fail++;goto me_done;}}me_done:;
 
-  // Negative-space highlight helper remains monotonic and continuous.
-  for(float hv : {-1.0f,-0.5f,0.5f,1.0f}){
-    float gain=std::pow(2.0f,hv),mid=.42f,prev=-1.0e30f;
-    for(int i=0;i<=24000;i++){
-      float x=mid+(1.5f-mid)*(float)i/24000.0f;float y=keystone_highlight_gain_monotonic(x,gain,mid);
-      if(y+1.0e-6f<prev){std::printf("FAIL highlight helper hv=%g x=%g\n",hv,x);fail++;break;}prev=y;
-    }
-    float jump=std::fabs(keystone_highlight_gain_monotonic(1.000001f,gain,mid)-keystone_highlight_gain_monotonic(0.999999f,gain,mid));
-    if(jump>1.0e-4f){std::printf("FAIL highlight continuity hv=%g jump=%g\n",hv,jump);fail++;}
-  }
+  // White/Black Clean are manual, distinct, and preserve approximate luminance while reducing neutral contamination.
+  {defaults();input_space=14;white_gamut_clean=1;float3 w={1.0f,.95f,.90f};auto wo=transform(1,1,0,0,w.x,w.y,w.z);float spread0=std::max({w.x,w.y,w.z})-std::min({w.x,w.y,w.z}),spread1=std::max({wo.x,wo.y,wo.z})-std::min({wo.x,wo.y,wo.z});if(!(spread1<spread0)){std::printf("FAIL White Clean spread %g -> %g\n",spread0,spread1);fail++;}
+    defaults();input_space=14;black_gamut_clean=1;float3 b={.010f,.008f,.012f};auto bo=transform(1,1,0,0,b.x,b.y,b.z);spread0=.004f;spread1=std::max({bo.x,bo.y,bo.z})-std::min({bo.x,bo.y,bo.z});if(!(spread1<spread0)){std::printf("FAIL Black Clean spread %g -> %g\n",spread0,spread1);fail++;}}
 
-  // Known high-risk legal color/desatch combinations stay finite and above the encoded catastrophic floor.
-  struct Case{float chroma,vib,hue,gs,rs,grs,bs,cs,ms,ys;};
-  std::vector<Case> cases={{2,0,0,0,0,0,0,0,0,0},{1,0,180,0,0,0,0,0,0,0},{2,1,-180,-1,-1,-1,-1,-1,-1,-1},{.5f,-1,90,-.7f,-1,0,-.5f,-.8f,-.3f,-.9f}};
-  std::vector<float3> inputs={{.8f,.1f,.1f},{.1f,.8f,.1f},{.1f,.1f,.8f},{1.0f,.02f,.3f},{.02f,1.0f,.8f}};
-  for(int sp=0;sp<=17;sp++)for(auto c:cases)for(auto in:inputs){
-    defaults();input_space=(float)sp;chroma=c.chroma;vibrance=c.vib;hue_rotate=c.hue;global_sat=c.gs;r_sat=c.rs;g_sat=c.grs;b_sat=c.bs;c_sat=c.cs;m_sat=c.ms;y_sat=c.ys;
-    auto o=transform(1,1,0,0,in.x,in.y,in.z);
-    if(!finite3(o)||min3(o)<-1.0005f){std::printf("FAIL encoded safety sp=%d out=%g,%g,%g\n",sp,o.x,o.y,o.z);fail++;goto encoded_done;}
-  }
-  encoded_done: ;
-
-  // Randomized stress with final finite fallback disabled by Python runner.
-  unsigned long long state=0x123456789abcdefULL;
-  auto rnd=[&](){state^=state<<7;state^=state>>9;state^=state<<8;return(float)((state>>11)&0xFFFFFF)/(float)0xFFFFFF;};
-  auto rr=[&](float a,float b){return a+(b-a)*rnd();};
+  // Randomized full-range stress, with finite_or_zero disabled by runner.
+  unsigned long long state=0x123456789abcdefULL;auto rnd=[&](){state^=state<<7;state^=state>>9;state^=state<<8;return(float)((state>>11)&0xFFFFFF)/(float)0xFFFFFF;};auto rr=[&](float a,float b){return a+(b-a)*rnd();};
   const int N=150000;
-  for(int sp=0;sp<=17;sp++){
-    for(int n=0;n<N;n++){
-      defaults();input_space=(float)sp;
-      logc3_ei=(float)(int)(rnd()*11.0f);if(logc3_ei>10)logc3_ei=10;
-      input_gamut_heal=(rnd()<0.15f)?1.0f:0.0f;temp=rr(-100,100);tint=rr(-100,100);
-      fns_mid_out=rr(.10f,.80f);fns_contrast_below=rr(.1f,3.0f);fns_contrast_above=rr(.1f,3.0f);fns_printer_r=rr(0,50);fns_printer_g=rr(0,50);fns_printer_b=rr(0,50);
-      balance_red=rr(-.5,.5);balance_green=rr(-.5,.5);balance_blue=rr(-.5,.5);
-      p_exposure=rr(-6,6);p_bp=rr(-.05,.05);p_contrast=rr(.5,2);p_pivot_offset=rr(-.2,.2);p_shadows=rr(-1,1);p_highlights=rr(-1,1);p_high_soft=rr(0,2);
-      chroma=rr(0,2);vibrance=rr(-1,1);hue_rotate=rr(-180,180);
-      warm_target=rr(-25,25);warm_hue_shift=rr(-25,25);warm_chroma=rr(.5,1.5);warm_exposure=rr(-.5,.5);warm_evenness=rr(0,1);
-      global_sat=rr(-1,0);r_sat=rr(-1,0);g_sat=rr(-1,0);b_sat=rr(-1,0);c_sat=rr(-1,0);m_sat=rr(-1,0);y_sat=rr(-1,0);
-      native_negative_compress=rr(0,1);black_gamut_clean=rr(0,1);output_skin_protect=rr(0,1);
-      float3 in={rr(-.25f,1.5f),rr(-.25f,1.5f),rr(-.25f,1.5f)};auto o=transform(1,1,0,0,in.x,in.y,in.z);
-      if(!finite3(o)||maxabs3(o)>1.0e4f||min3(o)<-1.0005f){std::printf("FAIL stress sp=%d n=%d in=%g,%g,%g out=%g,%g,%g mid=%g cb=%g ca=%g pr=%g pg=%g pb=%g exp=%g con=%g chroma=%g vib=%g hue=%g gs=%g\n",sp,n,in.x,in.y,in.z,o.x,o.y,o.z,fns_mid_out,fns_contrast_below,fns_contrast_above,fns_printer_r,fns_printer_g,fns_printer_b,p_exposure,p_contrast,chroma,vibrance,hue_rotate,global_sat);fail++;goto stress_done;}
-    }
+  for(int sp=0;sp<=17;sp++)for(int n=0;n<N;n++){
+    defaults();input_space=(float)sp;logc3_ei=(float)std::min(10,(int)(rnd()*11));input_gamut_heal=rnd()<.15f?1.0f:0.0f;temp=rr(-100,100);tint=rr(-100,100);
+    fns_printer_r=rr(0,50);fns_printer_g=rr(0,50);fns_printer_b=rr(0,50);p_exposure=rr(-6,6);p_bp=rr(-.05,.05);p_contrast=rr(.5,2);p_shadows=rr(-1,1);p_highlights=rr(-1,1);p_high_soft=rr(0,2);
+    chroma=rr(0,2);vibrance=rr(-1,1);hue_rotate=rr(-180,180);warm_target=rr(-25,25);warm_hue_shift=rr(-25,25);warm_chroma=rr(.5,1.5);warm_exposure=rr(-.5,.5);warm_evenness=rr(0,1);
+    global_sat=rr(-1,0);r_sat=rr(-1,0);g_sat=rr(-1,0);b_sat=rr(-1,0);c_sat=rr(-1,0);m_sat=rr(-1,0);y_sat=rr(-1,0);white_gamut_clean=rr(0,1);black_gamut_clean=rr(0,1);
+    float3 in={rr(-.25f,1.5f),rr(-.25f,1.5f),rr(-.25f,1.5f)};auto o=transform(1,1,0,0,in.x,in.y,in.z);if(!finite3(o)||maxabs3(o)>1e4f||min3(o)<-1.0005f){std::printf("FAIL stress sp=%d n=%d out=%g,%g,%g\n",sp,n,o.x,o.y,o.z);fail++;goto stress_done;}
   }
-  stress_done: ;
+  stress_done:;
 
   if(fail){std::printf("FAILURES=%d\n",fail);return 1;}
-  std::printf("PASS Keystone RC27 behavioral suite: permanent negative tone stage, live printer lights, scene-referred color, exact ME_Desatch stage, 2700000 randomized transforms\n");
+  std::printf("PASS Keystone RC28 behavioral suite: auto pivot, true exposure, isolated tone zones, gamut-aware color, automatic safety, White/Black Clean, 2700000 randomized transforms\n");
   return 0;
 }

@@ -1,24 +1,28 @@
 # Validation
 
-Keystone RC27 uses structural and behavioral release gates.
+Keystone RC28 uses structural and behavioral release gates.
 
 ## Structural gate
 
 `python3 ci/validate_dctl.py` verifies:
 
-- exactly one release DCTL with the RC27 filename/header;
+- exactly one RC28 DCTL with the expected filename/header;
 - Resolve transform/UI structure and balanced delimiters;
 - GPL SPDX and no merge markers;
 - no Metal UI/combo/function symbol collisions;
-- permanent Film Negative Space architecture is present and the old Mode/Mid In/Blend UI is absent;
-- printer lights are applied as a grade and are not divided out by the inverse;
-- `Color / Mid Chroma` remains removed;
-- all seven ME_Desatch controls remain present;
-- ME_Desatch runs through the pre-output working-transfer stage rather than the final encoded tail;
-- RC25 monotonic highlight and catastrophic-safety functions remain present;
+- manual Negative Mid/Below/Above and manual Pivot are absent;
+- native Balance R/G/B, Output Negatives, and Output Skin Protect remain removed;
+- fixed reversible Negative Space plumbing and live printer lights are present;
+- true scene Exposure and selected-space/EI automatic contrast pivot are present;
+- automatic Shadows/Highlights zone functions and monotonic Roll Off are present;
+- gamut-aware Chroma/Hue protection is present;
+- `Skin / Hue Uniformity` replaces the misleading former Evenness label;
+- all seven ME_Desatch controls remain present in their working-transfer stage;
+- White Clean and Black Clean remain manual output controls with automatic skin protection;
+- catastrophic scene/encode safety remains present;
 - removed Color Volume and creative White Point remain absent;
 - README and this file contain the current DCTL SHA-256;
-- tagged releases include install/uninstall scripts, third-party notices, and behavioral CI.
+- tagged releases include scripts, third-party notices, and behavioral CI.
 
 ## Behavioral gate
 
@@ -29,19 +33,23 @@ The harness checks:
 - gamut matrix inverse round trips;
 - supported transfer encode/decode round trips and every LogC3 EI option;
 - bit-exact neutral identity across all 18 input spaces;
-- negative-response forward/inverse roundtrip and monotonicity;
-- printer R/G/B each produce a real, correctly directed image change and no longer cancel;
-- response-shape parameters alone remain a neutral working-space definition;
-- response-shape parameters materially alter a legal tone move;
-- Chroma/Vibrance/Hue are outside the negative remap and cannot be contaminated by changing negative response parameters when no in-sandwich grade is active;
+- fixed Negative Space forward/inverse monotonicity and roundtrip;
+- automatic middle-gray derivation through every transfer/EI;
+- Contrast preserves the derived 18% pivot across all 18 spaces and all LogC3 EI choices;
+- global Exposure behaves as a true +1 scene-linear stop across all input spaces;
+- printer R/G/B each produce a real correctly directed grade;
+- Shadows affect the intended shadow zone without moving 18% gray/highlights;
+- Highlights affect the intended highlight zone without moving shadows/18% gray;
+- Roll Off is middle-gray neutral, highlight-only, and monotonic;
+- Chroma/Hue limiting respects the native gamut safety margin;
+- Skin Hue Uniformity changes selected skin color without materially changing luminance;
 - exact ME_Desatch parity when it is the only active module;
-- highlight continuity/monotonicity;
-- high-risk legal color + selective-desaturation combinations remain finite and above the catastrophic encoded floor;
+- White Clean and Black Clean reduce near-neutral contamination in their respective tonal regions;
 - **2,700,000 deterministic randomized full transforms** across all 18 input spaces with the emergency finite fallback disabled.
 
 ## Current source hash
 
-`71866fafd1a3cad917c31e4db936ca01c04b9c7f47cb1d1366faf3dc5cebdf91`  `Keystone-v1.0-RC27.dctl`
+`a4ed9deb235c33e81ae65a01a444f929d1d98389f133dbf2ee0db7f5aed5ff7a`  `Keystone-v1.0-RC28.dctl`
 
 ## Runtime gate
 

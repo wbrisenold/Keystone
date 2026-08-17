@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0-RC28
+
+- Removed user-facing Negative Mid/Below/Above response controls; Film Negative Space response is now fixed internal technical plumbing.
+- Removed native `Balance / R/G/B`; negative printer lights are Keystone's exposed density-style RGB balance.
+- Removed manual `Tone / Pivot`; Contrast now derives its anchor from the selected input transfer/EI and 18% scene gray.
+- Moved global Exposure to a true scene-linear `2^stops` operation before negative development.
+- Replaced broad split-contrast Shadows/Highlights with automatic scene-stop exposure zones that leave middle gray alone.
+- Replaced channelwise Roll Off with an automatic-knee, luminance-preserving monotonic scene-linear shoulder.
+- Added destination/native-gamut-aware positive Chroma limiting and Hue-rotation protection.
+- Renamed `Skin / Evenness` to `Skin / Hue Uniformity` to match its actual hue-convergence behavior.
+- Retained all seven ME_Desatch controls in the selected native working-transfer stage.
+- Replaced `Output / Negatives` with always-on technical negative/encode safety.
+- Removed manual `Output / Skin Protect`; cleanup skin protection is automatic.
+- Kept `Output / White Clean` and `Output / Black Clean` as manual creative cleanup sliders.
+- Expanded behavioral CI for auto pivot, true Exposure, tonal isolation, monotonic Roll Off, gamut-aware color, Hue Uniformity, White/Black Clean, and 2.7 million randomized transforms.
+
 ## 1.0-RC27
 
 - Made Keystone's internal Film Negative Space tone-development architecture permanent and removed the user-facing Off/Internal mode.

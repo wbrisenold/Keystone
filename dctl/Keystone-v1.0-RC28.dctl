@@ -1,17 +1,20 @@
-// Keystone-v1.0-RC27.dctl
-// Keystone v1.0 RC27 production candidate.
+// Keystone-v1.0-RC28.dctl
+// Keystone v1.0 RC28 production candidate.
 // Exact DeSatch module behavior matched to Moaz Elgabry ME_Desatch.dctl
 // commit 5e57387d486e82e416cf25bc8a95aad5e7f33c7a.
 // That source is GPL-3.0. This exact-match integration is a modified/combined work
 // and must be distributed under GPL-3.0-compatible terms if conveyed.
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Current RC27 architecture:
+// Current RC28 architecture:
 // - source-native decode and gamut normalization;
-// - native-linear gain WB and native RGB balance;
-// - optional internal reversible Film Negative Space working-space sandwich;
-// - Primera-derived exposure/tone with Keystone monotonic highlight repair;
-// - perceptual color/skin operations;
-// - output neutral cleanup, transfer-aware catastrophic-negative safety, and native encode.
+// - native-linear gain WB;
+// - true scene-linear global Exposure;
+// - permanent reversible Film Negative Space development with live printer lights;
+// - automatic colorspace/EI-derived contrast pivot and automatic scene-stop tone zones;
+// - destination-gamut-aware perceptual color/skin operations;
+// - exact ME_Desatch working-transfer stage;
+// - manual White Clean / Black Clean with automatic skin protection;
+// - always-on catastrophic-negative/overflow safety and native encode.
 // Creative defaults remain mathematically neutral. No display transform or hidden look is enabled.
 // Color Volume and Keystone's former creative White / Point selector remain removed.
 // No universal AWG4 creative roundtrip is used; AWG4 is used only for actual AWG4 input/output.
@@ -218,32 +221,17 @@ DEFINE_UI_PARAMS(input_gamut_heal, Input / Repair, DCTLUI_COMBO_BOX, 0, {heal_of
 DEFINE_UI_PARAMS(temp, WB / Temp, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 0.1)
 DEFINE_UI_PARAMS(tint, WB / Tint, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 0.1)
 
-// ---- BALANCE ----
-// Native RGB channel trims are deliberately camera-gamut dependent.
-// General white balance belongs in Temperature/Tint above; use these for deliberate channel balance.
-DEFINE_UI_PARAMS(balance_red, Balance / Red, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
-DEFINE_UI_PARAMS(balance_green, Balance / Green, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
-DEFINE_UI_PARAMS(balance_blue, Balance / Blue, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
-
-// ---- FILM NEGATIVE SPACE ----
-// Keystone always uses its internal negative-response tone-development stage. The working-space
-// remap is mathematically reversible, so neutral Keystone remains an exact bypass. Only the
-// printer-light grade and tone controls create image changes inside this stage.
-// Scene middle gray entering the stage is fixed at 0.18 because Keystone has already decoded
-// the selected camera/log transfer to scene-linear light.
-DEFINE_UI_PARAMS(fns_mid_out, Negative / Mid, DCTLUI_SLIDER_FLOAT, 0.42, 0.10, 0.80, 0.001)
-DEFINE_UI_PARAMS(fns_contrast_below, Negative / Below, DCTLUI_SLIDER_FLOAT, 1.0, 0.1, 3.0, 0.001)
-DEFINE_UI_PARAMS(fns_contrast_above, Negative / Above, DCTLUI_SLIDER_FLOAT, 1.0, 0.1, 3.0, 0.001)
+// ---- NEGATIVE DEVELOPMENT ----
+// Keystone's negative response is fixed technical plumbing; only live printer lights are exposed.
 DEFINE_UI_PARAMS(fns_printer_r, Negative / Printer R, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
 DEFINE_UI_PARAMS(fns_printer_g, Negative / Printer G, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
 DEFINE_UI_PARAMS(fns_printer_b, Negative / Printer B, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
 
-// ---- EXPOSURE / TONE (Primera-derived controls) ----
-// The following ranges/defaults retain the established Primera-compatible UI.
+// ---- TONE ----
+// Exposure is true scene-linear stops. Contrast pivot and tonal zones are automatic.
 DEFINE_UI_PARAMS(p_exposure, Tone / Exposure, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
 DEFINE_UI_PARAMS(p_bp, Tone / Black, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
 DEFINE_UI_PARAMS(p_contrast, Tone / Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001)
-DEFINE_UI_PARAMS(p_pivot_offset, Tone / Pivot, DCTLUI_SLIDER_FLOAT, 0.0, -0.2, 0.2, 0.001)
 DEFINE_UI_PARAMS(p_shadows, Tone / Shadows, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_highlights, Tone / Highlights, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.001)
 DEFINE_UI_PARAMS(p_high_soft, Tone / Roll Off, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 2.0, 0.001)
@@ -259,11 +247,11 @@ DEFINE_UI_PARAMS(warm_target, Skin / Target, DCTLUI_SLIDER_FLOAT, 0.0, -25.0, 25
 DEFINE_UI_PARAMS(warm_hue_shift, Skin / Hue, DCTLUI_SLIDER_FLOAT, 0.0, -25.0, 25.0, 0.25)
 DEFINE_UI_PARAMS(warm_chroma, Skin / Chroma, DCTLUI_SLIDER_FLOAT, 1.0, 0.50, 1.50, 0.01)
 DEFINE_UI_PARAMS(warm_exposure, Skin / Exposure, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
-DEFINE_UI_PARAMS(warm_evenness, Skin / Evenness, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(warm_evenness, Skin / Hue Uniformity, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
 
 // ---- DESATCH ----
-// Exact ME_Desatch control ranges/order. RC27 evaluates this module in the selected native
-// encoded working transfer AFTER negative-tone development and perceptual color/skin, then
+// Exact ME_Desatch control ranges/order. RC28 evaluates this module in the selected native
+// encoded working transfer AFTER negative development and perceptual color/skin, then
 // decodes back to scene-linear before output cleanup. This preserves the standalone module's
 // code-value behavior without leaving it as an encoded tail operation.
 DEFINE_UI_PARAMS(global_sat, Sat / Global, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 0.0, 0.0001)
@@ -276,9 +264,8 @@ DEFINE_UI_PARAMS(y_sat, Sat / Yellow, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 0.0, 0.000
 
 
 // ---- OUTPUT ----
-DEFINE_UI_PARAMS(native_negative_compress, Output / Negatives, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(white_gamut_clean, Output / White Clean, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
 DEFINE_UI_PARAMS(black_gamut_clean, Output / Black Clean, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
-DEFINE_UI_PARAMS(output_skin_protect, Output / Skin Protect, DCTLUI_SLIDER_FLOAT, 1.0, 0.0, 1.0, 0.01)
 
 // ---- Helpers ----
 __DEVICE__ float clampf(float v, float lo, float hi) { return _fmaxf(lo, _fminf(hi, v)); }
@@ -471,14 +458,6 @@ __DEVICE__ float3 linear_gain_wb_native(float3 rgb,int g,float temp_value,float 
   gains=make_float3(clampf(gains.x*norm,0.125f,8.0f),1.0f,clampf(gains.z*norm,0.125f,8.0f));
   return make_float3(rgb.x*gains.x,rgb.y,gains.z*rgb.z);
 }
-__DEVICE__ float3 native_rgb_balance_xyz(float3 xyz,int g,float r_stops,float g_stops,float b_stops){
-  float3 rgb=xyz_to_native_linear(xyz,g);
-  rgb.x*=_powf(2.0f,r_stops);
-  rgb.y*=_powf(2.0f,g_stops);
-  rgb.z*=_powf(2.0f,b_stops);
-  return native_linear_to_xyz(rgb,g);
-}
-
 
 // ---- Internal Film Negative Space working-space helpers ----
 // Public behavior matched at the signal-model level:
@@ -486,6 +465,12 @@ __DEVICE__ float3 native_rgb_balance_xyz(float3 xyz,int g,float r_stops,float g_
 //   optional smooth transition around the pivot, printer-light density offsets,
 //   and an exact inverse around Keystone's creative block.
 // This is Keystone's own implementation; it does not copy the external DCTL source.
+#define KEYSTONE_FNS_MID_IN 0.18f
+#define KEYSTONE_FNS_MID_OUT 0.42f
+#define KEYSTONE_FNS_BELOW 0.85f
+#define KEYSTONE_FNS_ABOVE 0.75f
+#define KEYSTONE_FNS_BLEND 0.30f
+
 __DEVICE__ float fns_smoothstep01(float t){t=clampf(t,0.0f,1.0f);return t*t*(3.0f-2.0f*t);}
 __DEVICE__ float fns_pow_pos(float x,float p){return _powf(_fmaxf(x,1.0e-20f),p);}
 __DEVICE__ float fns_printer_gain(float point){
@@ -576,9 +561,9 @@ __DEVICE__ float3 technical_scene_ceiling_guard(float3 rgb){
   return rgb*make_float3(k,k,k);
 }
 
-// ---- Primera-derived tone helpers ----
-// Black point, shadow fill, soft highlight, and rolling contrast retain Primera v0.5.5 equations.
-// RC26 replaces the original highlight-gain equation because its hard x>=1 bypass creates a discontinuity.
+// ---- Primera-derived Black Point helper ----
+// Keystone retains Primera v0.5.5's soft black-point equation. RC28 replaces the former
+// broad Shadows/Highlights/Contrast helpers with automatic scene-stop zone math below.
 __DEVICE__ float primera_soft_black_point(float x, float bp, float knee) {
     if (x <= 0.0f) return x;
     float corrected = x - bp;
@@ -586,106 +571,66 @@ __DEVICE__ float primera_soft_black_point(float x, float bp, float knee) {
     return knee * _expf(corrected / knee - 1.0f);
 }
 
-__DEVICE__ float primera_shadow_fill(float x, float gain, float mid) {
-    if (x <= 0.0f) return x;
-    if (x >= mid) return x;
-    float t = x / mid;
-    float blend = t * t * (3.0f - 2.0f * t);
-    return x * (gain + (1.0f - gain) * blend);
+// ---- RC28 automatic tone engine ----
+// 18% scene gray is derived through the selected transfer/EI, then used as the sole
+// technical anchor. This makes the pivot colorspace-aware without exposing a manual Pivot.
+__DEVICE__ float auto_scene_midgray(int transfer_id,int logc3idx){
+  float3 m=make_float3(0.18f,0.18f,0.18f);
+  float3 c=encode_native_ei(m,transfer_id,logc3idx);
+  float3 d=decode_native_ei(c,transfer_id,logc3idx);
+  return clampf((d.x+d.y+d.z)/3.0f,0.01f,0.50f);
 }
-
-__DEVICE__ float keystone_highlight_gain_monotonic(float x, float gain, float mid) {
-    if (x <= mid) return x;
-    float span = _fmaxf(1.0f - mid, 1.0e-6f);
-    if (x >= 1.0f) {
-        // Continue with the same derivative reached at x=1. This keeps extended
-        // highlights continuous and monotonic instead of snapping back to identity.
-        float y1 = mid + span * gain;
-        return y1 + (x - 1.0f) * gain;
-    }
-    float t = (x - mid) / span;
-    float blend = t * t * (3.0f - 2.0f * t);
-    float scale = 1.0f + (gain - 1.0f) * blend;
-    return mid + (x - mid) * scale;
+__DEVICE__ float scene_ev_from_y(float Y,float mid){
+  if(Y<=1.0e-10f)return -20.0f;
+  return _log2f(Y/_fmaxf(mid,1.0e-8f));
 }
-
-__DEVICE__ float primera_soft_highlight(float x, float amount, float mid) {
-    if (x <= 0.0f) return x;
-    float knee_amount = _fminf(amount, 1.0f);
-    float strength = 1.0f + _fmaxf(amount - 1.0f, 0.0f) * 2.0f;
-    float knee = 1.0f - knee_amount * (1.0f - mid);
-    if (x <= knee) return x;
-    float range = 1.0f - knee;
-    float tt = (x - knee) / range * strength;
-    return knee + range * _tanhf(tt) / strength;
+__DEVICE__ float shadow_zone_mask(float ev){
+  // Protect the deepest toe, hold the useful shadow range, and be gone by middle gray.
+  float deep=smootherstep(-7.0f,-4.5f,ev);
+  float upper=1.0f-smootherstep(-1.00f,-0.15f,ev);
+  return clampf(deep*upper,0.0f,1.0f);
 }
-
-__DEVICE__ float primera_rolling_contrast(float x, float contrast, float pivot) {
-    if (x <= 0.0f) return x;
-    if (x >= 1.0f) return x;
-    if (x <= pivot) {
-        return _powf(x / pivot, contrast) * pivot;
-    } else {
-        float inv = 1.0f - x;
-        float inv_pivot = 1.0f - pivot;
-        return 1.0f - _powf(inv / inv_pivot, contrast) * inv_pivot;
-    }
+__DEVICE__ float highlight_zone_mask(float ev){
+  // No midtone lift: begins above +0.5 EV and reaches full influence by +2 EV.
+  return smootherstep(0.50f,2.00f,ev);
 }
-
-// Apply Keystone's Primera-derived tone controls directly in the internal negative-response
-// working values. RC27 no longer re-encodes these values through the camera/log transfer while
-// inside the negative stage; doing so was only a partial negative-space implementation.
-__DEVICE__ float3 apply_negative_space_tone(
-    float3 code,
-    float mid,
-    float exposure_value,
-    float black_value,
-    float contrast_value,
-    float pivot_offset,
-    float shadows_value,
-    float highlights_value,
-    float rolloff_value)
-{
-    if (_fabs(exposure_value)>1.0e-7f) {
-        float gain=_powf(2.0f,exposure_value);
-        code*=make_float3(gain,gain,gain);
-    }
-
-    if (_fabs(black_value)>1.0e-7f) {
-        float knee=0.005f;
-        float bp=-black_value;
-        code.x=primera_soft_black_point(code.x,bp,knee);
-        code.y=primera_soft_black_point(code.y,bp,knee);
-        code.z=primera_soft_black_point(code.z,bp,knee);
-    }
-
-    if (_fabs(contrast_value-1.0f)>1.0e-7f || _fabs(pivot_offset)>1.0e-7f) {
-        float pivot=clampf(mid+pivot_offset,0.01f,0.99f);
-        code.x=primera_rolling_contrast(code.x,contrast_value,pivot);
-        code.y=primera_rolling_contrast(code.y,contrast_value,pivot);
-        code.z=primera_rolling_contrast(code.z,contrast_value,pivot);
-    }
-
-    if (_fabs(shadows_value)>1.0e-7f) {
-        float shd_gain=_powf(2.0f,shadows_value);
-        code.x=primera_shadow_fill(code.x,shd_gain,mid);
-        code.y=primera_shadow_fill(code.y,shd_gain,mid);
-        code.z=primera_shadow_fill(code.z,shd_gain,mid);
-    }
-
-    if (_fabs(highlights_value)>1.0e-7f) {
-        float hi_gain=_powf(2.0f,highlights_value);
-        code.x=keystone_highlight_gain_monotonic(code.x,hi_gain,mid);
-        code.y=keystone_highlight_gain_monotonic(code.y,hi_gain,mid);
-        code.z=keystone_highlight_gain_monotonic(code.z,hi_gain,mid);
-    }
-
-    if (rolloff_value>1.0e-7f) {
-        code.x=primera_soft_highlight(code.x,rolloff_value,mid);
-        code.y=primera_soft_highlight(code.y,rolloff_value,mid);
-        code.z=primera_soft_highlight(code.z,rolloff_value,mid);
-    }
-    return code;
+__DEVICE__ float3 apply_common_stop_gain(float3 rgb,float stops,float mask){
+  if(_fabs(stops)<=1.0e-7f||mask<=1.0e-7f)return rgb;
+  float k=_powf(2.0f,stops*mask);
+  return rgb*make_float3(k,k,k);
+}
+__DEVICE__ float3 apply_auto_contrast_negative(float3 neg,float contrast_value,float pivot_neg,int g){
+  if(_fabs(contrast_value-1.0f)<=1.0e-7f)return neg;
+  float Y=native_linear_to_xyz(neg,g).y;
+  if(Y<=1.0e-10f||pivot_neg<=1.0e-8f)return neg;
+  float ratio=Y/pivot_neg;
+  float Yout=pivot_neg*_powf(_fmaxf(ratio,1.0e-20f),contrast_value);
+  float k=Yout/Y;
+  return neg*make_float3(k,k,k);
+}
+__DEVICE__ float3 apply_black_point_negative(float3 neg,float black_value,float pivot_neg,int g){
+  if(_fabs(black_value)<=1.0e-7f)return neg;
+  float Y=native_linear_to_xyz(neg,g).y;
+  if(Y<=1.0e-10f)return neg;
+  float knee=_fmaxf(pivot_neg*0.08f,1.0e-5f);
+  float bp=-black_value*pivot_neg;
+  float Yout=primera_soft_black_point(Y,bp,knee);
+  if(Yout<=0.0f)return neg;
+  float k=Yout/Y;
+  return neg*make_float3(k,k,k);
+}
+__DEVICE__ float3 apply_auto_rolloff_xyz(float3 xyz,float mid,float amount){
+  if(amount<=1.0e-7f||xyz.y<=1.0e-10f)return xyz;
+  float ev=scene_ev_from_y(xyz.y,mid);
+  const float knee_ev=2.50f;
+  if(ev<=knee_ev)return xyz;
+  float d=ev-knee_ev;
+  float strength=0.50f+2.50f*amount;
+  float out_d=_log2f(1.0f+strength*d)*0.69314718056f/strength;
+  float out_ev=knee_ev+out_d;
+  float Yout=mid*_powf(2.0f,out_ev);
+  float k=Yout/xyz.y;
+  return xyz*make_float3(k,k,k);
 }
 
 // ---- Native destination-gamut creative boundary ----
@@ -695,6 +640,23 @@ __DEVICE__ float native_gamut_margin_from_rgb(float3 rgb){float maxabs=_fmaxf(_f
 __DEVICE__ float native_gamut_margin_oklab(float3 lab,int g){return native_gamut_margin_from_rgb(xyz_to_native_linear(oklab_to_xyz(lab),g));}
 __DEVICE__ float vibrance_activity(float3 lab,float margin){float L=lab.x;float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(C<=VIBRANCE_ABS_C_MIN||C<=1e-8f||_fabs(L)<=1e-6f)return 0.0f;float q=C/_fmaxf(_fabs(L),1e-6f);float q_gate=smootherstep(VIBRANCE_Q0,VIBRANCE_Q1,q);float margin_gate=smootherstep(VIBRANCE_MARGIN0,VIBRANCE_MARGIN1,margin);return q_gate*margin_gate;}
 __DEVICE__ float limit_positive_chroma_scale(float3 lab,float proposed_scale,float min_margin,int g){if(proposed_scale<=1.0f)return proposed_scale;float current_margin=native_gamut_margin_oklab(lab,g);if(current_margin<=min_margin)return 1.0f;float3 candidate=make_float3(lab.x,lab.y*proposed_scale,lab.z*proposed_scale);if(native_gamut_margin_oklab(candidate,g)>=min_margin)return proposed_scale;float lo=1.0f,hi=proposed_scale;for(int i=0;i<VIBRANCE_SEARCH_ITERS;i++){float mid=(lo+hi)*0.5f;float3 test_lab=make_float3(lab.x,lab.y*mid,lab.z*mid);if(native_gamut_margin_oklab(test_lab,g)>=min_margin)lo=mid;else hi=mid;}return lo;}
+__DEVICE__ float3 enforce_native_gamut_oklab(float3 lab,float min_margin,int g){
+  if(native_gamut_margin_oklab(lab,g)>=min_margin)return lab;
+  float lo=0.0f,hi=1.0f;
+  for(int i=0;i<VIBRANCE_SEARCH_ITERS;i++){
+    float m=(lo+hi)*0.5f;
+    float3 q=make_float3(lab.x,lab.y*m,lab.z*m);
+    if(native_gamut_margin_oklab(q,g)>=min_margin)lo=m;else hi=m;
+  }
+  lab.y*=lo;lab.z*=lo;return lab;
+}
+__DEVICE__ float3 apply_safe_chroma_hue(float3 lab,float chroma_value,float hue_deg,int g){
+  float Cscale=chroma_value;
+  if(Cscale>1.0f)Cscale=limit_positive_chroma_scale(lab,Cscale,VIBRANCE_MIN_MARGIN,g);
+  lab.y*=Cscale;lab.z*=Cscale;
+  if(_fabs(hue_deg)>1.0e-7f){float a=lab.y,b=lab.z,ang=hue_deg*PI/180.0f,ca=_cosf(ang),sa=_sinf(ang);lab.y=a*ca-b*sa;lab.z=a*sa+b*ca;}
+  return enforce_native_gamut_oklab(lab,VIBRANCE_MIN_MARGIN,g);
+}
 __DEVICE__ float3 apply_vibrance(float3 lab,float vibr,int g){if(_fabs(vibr)<=1e-7f)return lab;float L=lab.x;float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(_fabs(L)<=1e-6f||C<=1e-8f)return lab;float margin=native_gamut_margin_oklab(lab,g);float activity=vibrance_activity(lab,margin);float v_eff=signed_square(vibr);float scale=_fmaxf(1.0f+VIBRANCE_MAX_CHANGE*v_eff*activity,0.0f);if(v_eff>0.0f)scale=limit_positive_chroma_scale(lab,scale,VIBRANCE_MIN_MARGIN,g);lab.y*=scale;lab.z*=scale;return lab;}
 
 __DEVICE__ float3 compress_to_gamut(float3 rgb,float luminance){
@@ -909,7 +871,7 @@ __DEVICE__ float output_skin_mask_xyz(float3 xyz,float target_deg){
 
 // ---- Exact ME_Desatch compatibility module ----
 // The cone-coordinate math below remains an exact compatibility implementation of the referenced
-// standalone DCTL. RC27 controls WHERE it is evaluated: in the selected native encoded transfer
+// standalone DCTL. RC28 controls WHERE it is evaluated: in the selected native encoded transfer
 // after negative development/color/skin and before output cleanup, with an immediate decode back
 // to scene-linear so technical output cleanup remains downstream.
 __DEVICE__ float3 me_rgb_to_cone(float3 rgb){
@@ -994,15 +956,10 @@ __DEVICE__ float3 apply_me_desatch_exact(float3 rgb,float gs,float rs,float grs,
 __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,float p_G,float p_B){
   // Clamp all parameters to ranges that mirror DEFINE_UI_PARAMS.
   float c_temp=clampf(temp,-100.0f,100.0f), c_tint=clampf(tint,-100.0f,100.0f);
-  const float c_fns_mid_in=0.18f;
-  float c_fns_mid_out=clampf(fns_mid_out,0.10f,0.80f);
-  float c_fns_below=clampf(fns_contrast_below,0.1f,3.0f), c_fns_above=clampf(fns_contrast_above,0.1f,3.0f);
-  const float c_fns_blend=0.10f;
   float c_fns_pr=clampf(fns_printer_r,0.0f,50.0f), c_fns_pg=clampf(fns_printer_g,0.0f,50.0f), c_fns_pb=clampf(fns_printer_b,0.0f,50.0f);
   float c_p_exposure=clampf(p_exposure,-6.0f,6.0f);
   float c_p_bp=clampf(p_bp,-0.05f,0.05f);
   float c_p_contrast=clampf(p_contrast,0.5f,2.0f);
-  float c_p_pivot=clampf(p_pivot_offset,-0.2f,0.2f);
   float c_p_shadows=clampf(p_shadows,-1.0f,1.0f);
   float c_p_highlights=clampf(p_highlights,-1.0f,1.0f);
   float c_p_high_soft=clampf(p_high_soft,0.0f,2.0f);
@@ -1015,11 +972,8 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   float c_r_sat=clampf(r_sat,-1.0f,0.0f), c_g_sat=clampf(g_sat,-1.0f,0.0f), c_b_sat=clampf(b_sat,-1.0f,0.0f);
   float c_c_sat=clampf(c_sat,-1.0f,0.0f), c_m_sat=clampf(m_sat,-1.0f,0.0f), c_y_sat=clampf(y_sat,-1.0f,0.0f);
   bool desatch_active=_fabs(c_global_sat)>1e-7f||_fabs(c_r_sat)>1e-7f||_fabs(c_g_sat)>1e-7f||_fabs(c_b_sat)>1e-7f||_fabs(c_c_sat)>1e-7f||_fabs(c_m_sat)>1e-7f||_fabs(c_y_sat)>1e-7f;
-  float c_balr=clampf(balance_red,-0.50f,0.50f), c_balg=clampf(balance_green,-0.50f,0.50f), c_balb=clampf(balance_blue,-0.50f,0.50f);
-  float c_negcompress=clampf(native_negative_compress,0.0f,1.0f);
+  float c_whiteclean=clampf(white_gamut_clean,0.0f,1.0f);
   float c_blackclean=clampf(black_gamut_clean,0.0f,1.0f);
-  float c_output_skin_protect=clampf(output_skin_protect,0.0f,1.0f);
-  float c_gamutclean=_fmaxf(c_negcompress,c_blackclean);
   int raw_heal=(int)(input_gamut_heal+0.5f);int c_heal=raw_heal==1?1:0;
   int raw_logc3ei=(int)(logc3_ei+0.5f);int c_logc3ei=(raw_logc3ei>=0&&raw_logc3ei<=10)?raw_logc3ei:7;
 
@@ -1030,7 +984,7 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   else if(sp==9){g=7;ti_tf=9;}else if(sp==10){g=9;ti_tf=10;}else if(sp==11){g=10;ti_tf=13;}else if(sp==12){g=8;ti_tf=11;}
   else if(sp==13){g=8;ti_tf=14;}else if(sp==14){g=0;ti_tf=11;}else if(sp==15){g=12;ti_tf=3;}else if(sp==16){g=10;ti_tf=16;}else if(sp==17){g=10;ti_tf=17;}
 
-  bool base_neutral=c_heal==0&&_fabs(c_temp)<=1e-7f&&_fabs(c_tint)<=1e-7f&&_fabs(c_balr)<=1e-7f&&_fabs(c_balg)<=1e-7f&&_fabs(c_balb)<=1e-7f&&_fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&_fabs(c_p_contrast-1.0f)<=1e-7f&&_fabs(c_p_pivot)<=1e-7f&&_fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&c_p_high_soft<=1e-7f&&_fabs(c_chroma-1.0f)<=1e-7f&&_fabs(c_vibrance)<=1e-7f&&_fabs(c_hue)<=1e-7f&&_fabs(c_warm_hue)<=1e-7f&&_fabs(c_warm_chroma-1.0f)<=1e-7f&&_fabs(c_warm_exposure)<=1e-7f&&_fabs(c_warm_evenness)<=1e-7f&&_fabs(c_fns_pr-25.0f)<=1e-7f&&_fabs(c_fns_pg-25.0f)<=1e-7f&&_fabs(c_fns_pb-25.0f)<=1e-7f&&c_negcompress<=1e-7f&&c_blackclean<=1e-7f;
+  bool base_neutral=c_heal==0&&_fabs(c_temp)<=1e-7f&&_fabs(c_tint)<=1e-7f&&_fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&_fabs(c_p_contrast-1.0f)<=1e-7f&&_fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&c_p_high_soft<=1e-7f&&_fabs(c_chroma-1.0f)<=1e-7f&&_fabs(c_vibrance)<=1e-7f&&_fabs(c_hue)<=1e-7f&&_fabs(c_warm_hue)<=1e-7f&&_fabs(c_warm_chroma-1.0f)<=1e-7f&&_fabs(c_warm_exposure)<=1e-7f&&_fabs(c_warm_evenness)<=1e-7f&&_fabs(c_fns_pr-25.0f)<=1e-7f&&_fabs(c_fns_pg-25.0f)<=1e-7f&&_fabs(c_fns_pb-25.0f)<=1e-7f&&c_whiteclean<=1e-7f&&c_blackclean<=1e-7f;
   if(base_neutral){
     if(!desatch_active)return make_float3(p_R,p_G,p_B);
     float3 exact_only=apply_me_desatch_exact(make_float3(p_R,p_G,p_B),c_global_sat,c_r_sat,c_g_sat,c_b_sat,c_c_sat,c_m_sat,c_y_sat);
@@ -1054,33 +1008,39 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
     if(c_heal==1)xyz=input_gamut_heal_xyz(xyz);
   }
 
-  // Optional native-RGB channel trims. These remain Keystone controls.
-  if(_fabs(c_balr)>1e-7f||_fabs(c_balg)>1e-7f||_fabs(c_balb)>1e-7f)
-    xyz=native_rgb_balance_xyz(xyz,g,c_balr,c_balg,c_balb);
 
   // ============================================================
-  // Permanent Film Negative Space tone-development stage
+  // RC28 scene exposure + permanent Film Negative Space development
   // ============================================================
-  // The reversible remap itself is neutral. Printer lights are a real grade INSIDE the
-  // sandwich and are intentionally NOT divided back out on EXIT. Tone controls operate
-  // directly on the novel negative-response values rather than being reinterpreted as
-  // the selected camera/log transfer.
+  // Exposure is a true scene-linear stop move before the negative stage.
+  if(_fabs(c_p_exposure)>1.0e-7f){float k=_powf(2.0f,c_p_exposure);xyz*=make_float3(k,k,k);}
+
+  float auto_mid=auto_scene_midgray(ti_tf,c_logc3ei);
+  float scene_Y_for_zones=xyz.y;
   bool negative_grade_active=
     _fabs(c_fns_pr-25.0f)>1e-7f||_fabs(c_fns_pg-25.0f)>1e-7f||_fabs(c_fns_pb-25.0f)>1e-7f||
-    _fabs(c_p_exposure)>1e-7f||_fabs(c_p_bp)>1e-7f||_fabs(c_p_contrast-1.0f)>1e-7f||
-    _fabs(c_p_pivot)>1e-7f||_fabs(c_p_shadows)>1e-7f||_fabs(c_p_highlights)>1e-7f||c_p_high_soft>1e-7f;
+    _fabs(c_p_bp)>1e-7f||_fabs(c_p_contrast-1.0f)>1e-7f||
+    _fabs(c_p_shadows)>1e-7f||_fabs(c_p_highlights)>1e-7f||c_p_high_soft>1e-7f;
 
   if(negative_grade_active){
     float3 neg=xyz_to_native_linear(xyz,g);
-    neg=fns_forward_rgb(neg,c_fns_mid_in,c_fns_mid_out,c_fns_below,c_fns_above,c_fns_blend);
+    neg=fns_forward_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
     neg=fns_apply_printer_lights(neg,c_fns_pr,c_fns_pg,c_fns_pb);
-    neg=apply_negative_space_tone(
-      neg,c_fns_mid_out,c_p_exposure,c_p_bp,c_p_contrast,c_p_pivot,
-      c_p_shadows,c_p_highlights,c_p_high_soft);
-    neg=fns_inverse_rgb(neg,c_fns_mid_in,c_fns_mid_out,c_fns_below,c_fns_above,c_fns_blend);
+
+    float pivot_neg=fns_forward_characteristic(auto_mid,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
+    neg=apply_black_point_negative(neg,c_p_bp,pivot_neg,g);
+    neg=apply_auto_contrast_negative(neg,c_p_contrast,pivot_neg,g);
+
+    float ev=scene_ev_from_y(scene_Y_for_zones,auto_mid);
+    neg=apply_common_stop_gain(neg,c_p_shadows,shadow_zone_mask(ev));
+    neg=apply_common_stop_gain(neg,c_p_highlights,highlight_zone_mask(ev));
+    neg=fns_inverse_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
     neg=technical_scene_ceiling_guard(neg);
     xyz=native_linear_to_xyz(neg,g);
   }
+  // Roll Off is a technical luminance shoulder after negative development: highlight-only,
+  // chromaticity-preserving, automatic knee, and mathematically monotonic.
+  if(c_p_high_soft>1.0e-7f)xyz=apply_auto_rolloff_xyz(xyz,auto_mid,c_p_high_soft);
 
   // Shared color/opponent domain: XYZ D65 -> Oklab. Color-only operations below
   // are returned to XYZ with the current scene Y preserved.
@@ -1089,8 +1049,9 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   float3 lab=xyz_to_oklab(xyz);
   float L=lab.x;
 
-  // Global Chroma/Hue are pure Oklab operations. Gamut compression is explicit downstream.
-  if(_fabs(c_chroma-1.0f)>1e-7f||_fabs(c_hue)>1e-7f){float av=lab.y*c_chroma,bv=lab.z*c_chroma;float ang=c_hue*PI/180.0f,ca=_cosf(ang),sak=_sinf(ang);lab.y=av*ca-bv*sak;lab.z=av*sak+bv*ca;}
+  // Chroma/Hue are destination-gamut aware. Positive chroma expansion and hue rotation
+  // are smoothly limited before they can create invalid native RGB.
+  if(_fabs(c_chroma-1.0f)>1e-7f||_fabs(c_hue)>1e-7f)lab=apply_safe_chroma_hue(lab,c_chroma,c_hue,g);
   if(_fabs(c_vibrance)>1e-7f)lab=apply_vibrance(lab,c_vibrance,g);
 
 
@@ -1120,6 +1081,8 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
     }
   }
 
+  // Skin edits share the same automatic destination-gamut boundary.
+  if(skin_primary_active||skin_even_active)lab=enforce_native_gamut_oklab(lab,VIBRANCE_MIN_MARGIN,g);
   float3 graded_xyz=oklab_to_xyz_preserve_y_safe(lab,color_ref_Y);
   if(_fabs(c_warm_exposure)>1e-7f&&skin_exposure_mask>1e-8f){float k=_powf(2.0f,c_warm_exposure*skin_exposure_mask);graded_xyz*=make_float3(k,k,k);}
 
@@ -1142,23 +1105,19 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
     graded_xyz=native_linear_to_xyz(ds_back,g);
   }
 
-  // Output cleanup. White and black neutralization are independent and preserve
-  // scene Y. Skin Protect attenuates only the creative neutralization. The technical
-  // native negative-primary repair remains active at full requested strength so skin
-  // is never "protected" into invalid negative native RGB.
-  // No palette matrix, RGB crosstalk, hue rotation, or global saturation look.
+  // Output cleanup. White Clean and Black Clean remain manual creative controls.
+  // Skin protection is automatic: the established skin selector attenuates neutral cleanup,
+  // while hard technical encode-domain safety remains always on and cannot be disabled.
   float output_skin_mask=0.0f;
-  if(c_output_skin_protect>1e-7f&&(c_negcompress>1e-7f||c_blackclean>1e-7f))
-    output_skin_mask=output_skin_mask_xyz(graded_xyz,c_warm_target);
-  float output_skin_keep=1.0f-clampf(c_output_skin_protect*output_skin_mask,0.0f,1.0f);
-  float white_clean_amt=c_negcompress*output_skin_keep;
+  if(c_whiteclean>1e-7f||c_blackclean>1e-7f)output_skin_mask=output_skin_mask_xyz(graded_xyz,c_warm_target);
+  float output_skin_keep=1.0f-clampf(output_skin_mask,0.0f,1.0f);
+  float white_clean_amt=c_whiteclean*output_skin_keep;
   float black_clean_amt=c_blackclean*output_skin_keep;
   if(white_clean_amt>1e-7f)graded_xyz=clean_neutral_highlights_xyz(graded_xyz,white_clean_amt);
   if(black_clean_amt>1e-7f)graded_xyz=clean_neutral_shadows_xyz(graded_xyz,black_clean_amt);
   float3 cam=xyz_to_native_linear(graded_xyz,g);
   cam=technical_scene_ceiling_guard(cam);
   cam=technical_encode_domain_guard(cam,graded_xyz.y);
-  if(c_gamutclean>1e-7f){float3 safe=compress_to_gamut(cam,graded_xyz.y);cam=cam+(safe-cam)*c_gamutclean;}
   cam=technical_encoded_negative_guard(cam,graded_xyz.y,ti_tf,c_logc3ei);
   float3 result=encode_native_ei(cam,ti_tf,c_logc3ei);
   result=technical_final_encoded_guard(result,ti_tf,c_logc3ei);
