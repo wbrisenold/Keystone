@@ -1,49 +1,32 @@
 # Luma Color System
 
-LookLab WB, Advanced Toner, PresenceOFX, Keystone, and LUTManagerOFX are separate tools with separate responsibilities. They are designed to work together without forcing every grade through every tool.
+LookLab WB, Advanced Toner, PresenceOFX, Keystone, and LUTManagerOFX are separate tools with separate responsibilities.
 
-## The three tools
+## Core responsibilities
 
 | Tool | Job | Typical placement |
 |---|---|---|
-| **Advanced Toner** | Environmental and narrative palette design | Before Keystone |
-| **Keystone** | Technical balance, tone, color volume, gamut handling, and cleanup | Main grading hub |
-| **LookLab WB** | Source/target white balance and tint | Before FilmMatrix / palette work |
-| **PresenceOFX** | Lens/optical presence | Between palette work and Keystone |
-| **LUTManagerOFX** | Folder-backed LUT browsing / look audition | Optional display-referred node after ODT |
+| **LookLab WB** | Source/target WB, tint, creative white point | Before FilmMatrix |
+| **Advanced Toner** | Environmental and narrative palette design | In its documented AWG3 / LogC3 space, before Keystone |
+| **Keystone** | Technical balance plus creative tone/color/skin, optional internal negative working space, output safety | Main grading hub |
+| **PresenceOFX** | Spatial/lens/optical presence | After palette/technical shaping, pre-ODT |
+| **LUTManagerOFX** | Folder-backed look audition | Usually after ODT for display LUTs |
 
-## Recommended full stack
+## Current AWG3 / LogC3 pipeline
 
-For the current AWG3 / LogC3 film-matrix workflow:
+`Camera/CST -> LookLab WB -> FilmMatrix -> Advanced Toner -> Keystone -> PresenceOFX -> scene-referred finishing -> ODT -> display LUT -> diagnostics`
 
-`Camera/CST -> LookLab WB -> FilmMatrix -> Advanced Toner -> PresenceOFX -> Keystone -> ODT -> LUTManagerOFX`
-
-Resolve node tree:
-
-1. Camera/CST or input transform
-2. [LookLab WB](https://github.com/wbrisenold/LookLab-WB)
-3. FilmMatrix or film-matrix prep
-4. [Advanced Toner](https://github.com/wbrisenold/AdvancedToner)
-5. [PresenceOFX](https://github.com/wbrisenold/PresenceOFX)
-6. [Keystone](https://github.com/wbrisenold/Keystone)
-7. ODT/display transform
-8. [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX), optional for Rec.709/display LUT auditioning
-
-Use only the tools the shot needs. A neutral technical shot may use Keystone only. A location-driven grade may use Advanced Toner + Keystone. A hero creative shot may use the full stack.
-
-FilmMatrix credit: the FilmMatrix node refers to [`PD-LogC3-FilmMatrix.dctl`](https://github.com/mikaelsundell/photographic-dctls/blob/master/PD-LogC3-FilmMatrix.dctl) from Mikael Sundell's `photographic-dctls` repository. I did not make that DCTL; I only use it in this node tree.
+Keystone RC26 can internally wrap its own creative controls in a reversible negative-style working space. That internal sandwich does not put downstream nodes such as PresenceOFX into negative space. Use a separate external Forward/Invert sandwich only when external nodes must also react in that novel space.
 
 ## Design rules
 
-- **Advanced Toner owns palette.**
-- **Keystone owns balance and technical grade behavior.**
-- Shot correction remains upstream of creative look design.
-- LookLab WB, Advanced Toner, PresenceOFX, and Keystone stay upstream of the display transform.
-- LUTManagerOFX usually goes after the display transform because most look LUTs expect Rec.709/display-referred input.
+- LookLab WB owns source/target WB, tint, and creative white-point selection.
+- Advanced Toner owns palette and expects its documented working space.
+- Keystone owns primary technical balance, tone/color/skin grading, optional internal Negative Space, cleanup, and encode safety.
+- Input repair/WB stays outside Keystone's internal Negative Space.
+- Keystone creative tone/color/skin runs inside Negative Space when enabled.
+- Output cleanup and delivery safety stay outside the internal Negative Space.
+- ODT and display LUTs remain downstream.
 - Neutral/bypass behavior is a release requirement.
 
-## Repository model
-
-Each tool lives in its own GitHub repository, carries its own license, has independent releases, and includes this system document so the relationship between the tools remains clear.
-
-Repositories: [Advanced Toner](https://github.com/wbrisenold/AdvancedToner), [LookLab WB](https://github.com/wbrisenold/LookLab-WB), [Keystone](https://github.com/wbrisenold/Keystone), [PresenceOFX](https://github.com/wbrisenold/PresenceOFX), [LUTManagerOFX](https://github.com/wbrisenold/LUTManagerOFX).
+FilmMatrix in this workflow refers to [`PD-LogC3-FilmMatrix.dctl`](https://github.com/mikaelsundell/photographic-dctls/blob/master/PD-LogC3-FilmMatrix.dctl) by Mikael Sundell. It is a separate third-party node and is not distributed with Keystone.

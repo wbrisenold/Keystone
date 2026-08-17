@@ -1,25 +1,20 @@
-// Keystone-v1.0-RC24-Metal-Collision-Fix.dctl
-// Keystone v1.0 RC24 production candidate.
+// Keystone-v1.0-RC26.dctl
+// Keystone v1.0 RC26 production candidate.
 // Exact DeSatch module behavior matched to Moaz Elgabry ME_Desatch.dctl
 // commit 5e57387d486e82e416cf25bc8a95aad5e7f33c7a.
 // That source is GPL-3.0. This exact-match integration is a modified/combined work
 // and must be distributed under GPL-3.0-compatible terms if conveyed.
 // SPDX-License-Identifier: GPL-3.0-or-later
-// RC7 keeps the HDR-safe primaries and native-linear gain white balance, removes
-// the former Density/Chroma Richness system, and adds exact ME_Desatch-compatible
-// global + six-hue selective desaturation at the encoded output stage.
-// RC12 strengthens both White & Gamut Clean and Black & Gamut Clean: broader neutral eligibility, earlier tonal engagement, and a stronger perceptual slider response while preserving scene Y.
-// RC13 adds Output / Skin Protect, using Keystone's existing Skin Target selector to shield skin from white/black neutralization while leaving technical negative-gamut repair active.
-// RC14 adds a dedicated scene-stop Dynamic Range stage after contrast: Shadow Recovery, Highlight Recovery, and Specular Roll-Off.
-// RC15 adds localized Black Point and White Point trims to the same scene-stop range stage and shortens the WB / Range UI labels.
-// RC24 removes the manual Contrast Pivot: Contrast now derives its scene-stop pivot from each input transfer's encoded 18% gray, calibrated so LogC3 EI800 matches the familiar 0.435 grading reference.
-// RC24 also extends White Point to -2.0 / +4.0 stops for stronger endpoint/contrast shaping.
-// These controls preserve XYZ chromaticity, keep zero/default behavior neutral, and do not add Density or any hidden look.
-// It intentionally contains no Technicolor crosstalk, palette transform, or hue rotation.
-// Source-space roundtrip grader: native decode -> XYZ technical normalization ->
-// scene-linear exposure / scene-stop primaries and tone / perceptual color -> native-gamut handling -> native encode.
-// No universal AWG4 creative roundtrip. AWG4 is used only when AWG4 is the actual source/destination gamut.
+// Current RC26 architecture:
+// - source-native decode and gamut normalization;
+// - native-linear gain WB and native RGB balance;
+// - optional internal reversible Film Negative Space working-space sandwich;
+// - Primera-derived exposure/tone with Keystone monotonic highlight repair;
+// - perceptual color/skin operations;
+// - output neutral cleanup, transfer-aware catastrophic-negative safety, and native encode.
 // Creative defaults remain mathematically neutral. No display transform or hidden look is enabled.
+// Color Volume and Keystone's former creative White / Point selector remain removed.
+// No universal AWG4 creative roundtrip is used; AWG4 is used only for actual AWG4 input/output.
 
 // ---- Gamut -> XYZ matrices (colour-science 0.4.7) ----
 #define R0_C0 make_float3(0.4123907993f,0.2126390059f,0.0193308187f)
@@ -230,8 +225,22 @@ DEFINE_UI_PARAMS(balance_red, Balance / Red, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.
 DEFINE_UI_PARAMS(balance_green, Balance / Green, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
 DEFINE_UI_PARAMS(balance_blue, Balance / Blue, DCTLUI_SLIDER_FLOAT, 0.0, -0.50, 0.50, 0.01)
 
-// ---- EXPOSURE / TONE (Primera v0.5.5 math) ----
-// The following ranges/defaults mirror Primera exactly.
+// ---- FILM NEGATIVE SPACE ----
+// Internal reversible working-space sandwich inspired by the public Film Negative Space CST signal model.
+// Technical input conditioning stays outside; Keystone creative tone/color/skin controls run in the remapped space;
+// the inverse is applied before output cleanup/safety. Off preserves the RC25 path exactly.
+DEFINE_UI_PARAMS(fns_mode, Negative Space / Mode, DCTLUI_COMBO_BOX, 0, {fns_off,fns_internal},{Off,Internal Sandwich})
+DEFINE_UI_PARAMS(fns_mid_in, Negative / Mid In, DCTLUI_SLIDER_FLOAT, 0.18, 0.01, 1.0, 0.001)
+DEFINE_UI_PARAMS(fns_mid_out, Negative / Mid Out, DCTLUI_SLIDER_FLOAT, 0.42, 0.01, 1.0, 0.001)
+DEFINE_UI_PARAMS(fns_contrast_below, Negative / Below, DCTLUI_SLIDER_FLOAT, 1.0, 0.1, 3.0, 0.001)
+DEFINE_UI_PARAMS(fns_contrast_above, Negative / Above, DCTLUI_SLIDER_FLOAT, 1.0, 0.1, 3.0, 0.001)
+DEFINE_UI_PARAMS(fns_blend_width, Negative / Blend, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 0.5, 0.001)
+DEFINE_UI_PARAMS(fns_printer_r, Negative / Printer R, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_g, Negative / Printer G, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_b, Negative / Printer B, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+
+// ---- EXPOSURE / TONE (Primera-derived controls) ----
+// The following ranges/defaults retain the established Primera-compatible UI.
 DEFINE_UI_PARAMS(p_exposure, Tone / Exposure, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.001)
 DEFINE_UI_PARAMS(p_bp, Tone / Black, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
 DEFINE_UI_PARAMS(p_contrast, Tone / Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001)
@@ -246,18 +255,6 @@ DEFINE_UI_PARAMS(vibrance, Color / Vibrance, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0
 DEFINE_UI_PARAMS(midtone_chroma, Color / Mid Chroma, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
 DEFINE_UI_PARAMS(hue_rotate, Color / Hue, DCTLUI_SLIDER_FLOAT, 0.0, -180.0, 180.0, 0.1)
 
-// ---- COLOR VOLUME ----
-// Technical luma-axis compression. Defaults are neutral.
-DEFINE_UI_PARAMS(cv_gamut_compression, Volume / Compress, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
-DEFINE_UI_PARAMS(cv_gamut_threshold, Volume / Threshold, DCTLUI_SLIDER_FLOAT, 0.82, 0.50, 0.98, 0.005)
-// Highlight Volume progressively reduces purity only where scene exposure is high AND
-// color already occupies a meaningful fraction of its hue-dependent native gamut boundary.
-DEFINE_UI_PARAMS(cv_highlight_volume, Volume / Highlights, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
-DEFINE_UI_PARAMS(cv_highlight_purity, Volume / Purity, DCTLUI_SLIDER_FLOAT, 0.78, 0.30, 1.00, 0.01)
-DEFINE_UI_PARAMS(cv_highlight_start, Volume / Start EV, DCTLUI_SLIDER_FLOAT, 1.5, -1.0, 4.0, 0.1)
-// Diagnostics are encoded back through the selected native transfer so they remain
-// usable in Keystone's normal pre-ODT placement.
-DEFINE_UI_PARAMS(cv_view, Volume / View, DCTLUI_COMBO_BOX, 0, {cv_normal,cv_gamut_stress,cv_compression_view,cv_highlight_stress},{Normal,Gamut Stress,Compression Amount,Highlight Volume Stress})
 
 // ---- SKIN ----
 DEFINE_UI_PARAMS(warm_target, Skin / Target, DCTLUI_SLIDER_FLOAT, 0.0, -25.0, 25.0, 0.25)
@@ -276,9 +273,6 @@ DEFINE_UI_PARAMS(c_sat, Sat / Cyan, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 0.0, 0.0001)
 DEFINE_UI_PARAMS(m_sat, Sat / Magenta, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 0.0, 0.0001)
 DEFINE_UI_PARAMS(y_sat, Sat / Yellow, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 0.0, 0.0001)
 
-// ---- WHITE ----
-// Creative white choices match OpenDRT. D65 is neutral.
-DEFINE_UI_PARAMS(creative_whitepoint, White / Point, DCTLUI_COMBO_BOX, 2, {wp_d93,wp_d75,wp_d65,wp_d60,wp_d55,wp_d50},{D93,D75,D65,D60,D55,D50})
 
 // ---- OUTPUT ----
 DEFINE_UI_PARAMS(native_negative_compress, Output / Negatives, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
@@ -485,7 +479,105 @@ __DEVICE__ float3 native_rgb_balance_xyz(float3 xyz,int g,float r_stops,float g_
 }
 
 
-// ---- Primera v0.5.5 tone helpers (verbatim equations) ----
+// ---- Internal Film Negative Space working-space helpers ----
+// Public behavior matched at the signal-model level:
+//   scene-linear pivot remap, independent power above/below middle gray,
+//   optional smooth transition around the pivot, printer-light density offsets,
+//   and an exact inverse around Keystone's creative block.
+// This is Keystone's own implementation; it does not copy the external DCTL source.
+__DEVICE__ float fns_smoothstep01(float t){t=clampf(t,0.0f,1.0f);return t*t*(3.0f-2.0f*t);}
+__DEVICE__ float fns_pow_pos(float x,float p){return _powf(_fmaxf(x,1.0e-20f),p);}
+__DEVICE__ float fns_printer_gain(float point){
+  // One printer point represents 0.025 log10 exposure-density units. Neutral is 25.
+  float density=(point-25.0f)*0.025f;
+  return _powf(10.0f,density);
+}
+__DEVICE__ float fns_smooth_integral(float q){return q*q*q-0.5f*q*q*q*q;}
+__DEVICE__ float fns_log_response(float stop,float below,float above,float blend){
+  if(blend<=1.0e-7f)return stop<0.0f?below*stop:above*stop;
+  float d=above-below;
+  float F0=fns_smooth_integral(0.5f);
+  if(stop<=-blend){
+    float q=0.0f;
+    float vb=below*(-blend)+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+    return vb+below*(stop+blend);
+  }
+  if(stop>=blend){
+    float q=1.0f;
+    float vb=below*blend+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+    return vb+above*(stop-blend);
+  }
+  float q=(stop+blend)/(2.0f*blend);
+  return below*stop+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+}
+__DEVICE__ float fns_forward_characteristic(float x,float mid_in,float mid_out,float below,float above,float blend){
+  float scale=mid_out/_fmaxf(mid_in,1.0e-8f);
+  if(x<=0.0f)return x*scale;
+  float ratio=x/_fmaxf(mid_in,1.0e-8f);
+  float stop=_log2f(_fmaxf(ratio,1.0e-20f));
+  float out_stop=fns_log_response(stop,below,above,blend);
+  return mid_out*_powf(2.0f,out_stop);
+}
+__DEVICE__ float fns_inverse_characteristic(float y,float mid_in,float mid_out,float below,float above,float blend){
+  float inv_scale=mid_in/_fmaxf(mid_out,1.0e-8f);
+  if(y<=0.0f)return y*inv_scale;
+  if(blend<=1.0e-7f){
+    float ratio=y/_fmaxf(mid_out,1.0e-8f);
+    float p=y<mid_out?_fmaxf(below,1.0e-6f):_fmaxf(above,1.0e-6f);
+    float out_stop=_log2f(_fmaxf(ratio,1.0e-20f))/p;
+    // Keep the inverse finite even for extreme legal combinations. A common-ratio
+    // scene ceiling is applied after all three channels are reconstructed.
+    out_stop=clampf(out_stop,-100.0f,100.0f);
+    return mid_in*_powf(2.0f,out_stop);
+  }
+  // The blended forward curve is strictly monotonic for the supported positive powers.
+  // Invert it with bounded bisection only when Blend is actually enabled.
+  float lo=0.0f;
+  float hi=_fmaxf(mid_in,1.0f);
+  for(int grow=0;grow<14;grow++){
+    float fy=fns_forward_characteristic(hi,mid_in,mid_out,below,above,blend);
+    if(fy>=y)break;
+    hi=_fminf(hi*2.0f,8192.0f);
+  }
+  if(fns_forward_characteristic(hi,mid_in,mid_out,below,above,blend)<y)return hi;
+  for(int i=0;i<18;i++){
+    float m=(lo+hi)*0.5f;
+    float fy=fns_forward_characteristic(m,mid_in,mid_out,below,above,blend);
+    if(fy<y)lo=m;else hi=m;
+  }
+  return (lo+hi)*0.5f;
+}
+__DEVICE__ float3 fns_forward_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend,float pr,float pg,float pb){
+  float3 out=make_float3(
+    fns_forward_characteristic(rgb.x,mid_in,mid_out,below,above,blend),
+    fns_forward_characteristic(rgb.y,mid_in,mid_out,below,above,blend),
+    fns_forward_characteristic(rgb.z,mid_in,mid_out,below,above,blend));
+  float3 gains=make_float3(fns_printer_gain(pr),fns_printer_gain(pg),fns_printer_gain(pb));
+  return out*gains;
+}
+__DEVICE__ float3 fns_inverse_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend,float pr,float pg,float pb){
+  float3 gains=make_float3(fns_printer_gain(pr),fns_printer_gain(pg),fns_printer_gain(pb));
+  float3 v=make_float3(rgb.x/_fmaxf(gains.x,1.0e-12f),rgb.y/_fmaxf(gains.y,1.0e-12f),rgb.z/_fmaxf(gains.z,1.0e-12f));
+  return make_float3(
+    fns_inverse_characteristic(v.x,mid_in,mid_out,below,above,blend),
+    fns_inverse_characteristic(v.y,mid_in,mid_out,below,above,blend),
+    fns_inverse_characteristic(v.z,mid_in,mid_out,below,above,blend));
+}
+
+// Catastrophic-only scene-domain ceiling for the internal sandwich. The shallowest legal
+// negative exponent can otherwise turn a normal legal grade into millions of scene-linear units
+// during inversion. Values within +/-8192 are untouched; beyond that, RGB is uniformly scaled,
+// preserving hue and channel ratios rather than clipping one channel independently.
+__DEVICE__ float3 fns_scene_ceiling_guard(float3 rgb){
+  float m=_fmaxf(_fabs(rgb.x),_fmaxf(_fabs(rgb.y),_fabs(rgb.z)));
+  if(m<=8192.0f||m<=1.0e-12f)return rgb;
+  float k=8192.0f/m;
+  return rgb*make_float3(k,k,k);
+}
+
+// ---- Primera-derived tone helpers ----
+// Black point, shadow fill, soft highlight, and rolling contrast retain Primera v0.5.5 equations.
+// RC26 replaces the original highlight-gain equation because its hard x>=1 bypass creates a discontinuity.
 __DEVICE__ float primera_soft_black_point(float x, float bp, float knee) {
     if (x <= 0.0f) return x;
     float corrected = x - bp;
@@ -501,12 +593,19 @@ __DEVICE__ float primera_shadow_fill(float x, float gain, float mid) {
     return x * (gain + (1.0f - gain) * blend);
 }
 
-__DEVICE__ float primera_highlight_gain(float x, float gain, float mid) {
+__DEVICE__ float keystone_highlight_gain_monotonic(float x, float gain, float mid) {
     if (x <= mid) return x;
-    if (x >= 1.0f) return x;
-    float t = (x - mid) / (1.0f - mid);
+    float span = _fmaxf(1.0f - mid, 1.0e-6f);
+    if (x >= 1.0f) {
+        // Continue with the same derivative reached at x=1. This keeps extended
+        // highlights continuous and monotonic instead of snapping back to identity.
+        float y1 = mid + span * gain;
+        return y1 + (x - 1.0f) * gain;
+    }
+    float t = (x - mid) / span;
     float blend = t * t * (3.0f - 2.0f * t);
-    return x * (1.0f + (gain - 1.0f) * blend);
+    float scale = 1.0f + (gain - 1.0f) * blend;
+    return mid + (x - mid) * scale;
 }
 
 __DEVICE__ float primera_soft_highlight(float x, float amount, float mid) {
@@ -532,8 +631,8 @@ __DEVICE__ float primera_rolling_contrast(float x, float contrast, float pivot) 
     }
 }
 
-// Apply Primera's encoded-domain Contrast/Shadows/Highlights/Roll Off exactly
-// using Keystone's selected native transfer function.
+// Apply the Primera-derived encoded-domain tone block using Keystone's selected native transfer.
+// RC26 preserves the established controls but uses Keystone's monotonic highlight operator.
 __DEVICE__ float3 apply_primera_encoded_tone(
     float3 native_lin,
     int transfer_id,
@@ -568,9 +667,9 @@ __DEVICE__ float3 apply_primera_encoded_tone(
 
     if (highlights_value != 0.0f) {
         float hi_gain = _powf(2.0f, highlights_value);
-        code.x = primera_highlight_gain(code.x, hi_gain, mid);
-        code.y = primera_highlight_gain(code.y, hi_gain, mid);
-        code.z = primera_highlight_gain(code.z, hi_gain, mid);
+        code.x = keystone_highlight_gain_monotonic(code.x, hi_gain, mid);
+        code.y = keystone_highlight_gain_monotonic(code.y, hi_gain, mid);
+        code.z = keystone_highlight_gain_monotonic(code.z, hi_gain, mid);
     }
 
     if (rolloff_value > 0.0f) {
@@ -590,231 +689,6 @@ __DEVICE__ float native_gamut_margin_oklab(float3 lab,int g){return native_gamut
 __DEVICE__ float vibrance_activity(float3 lab,float margin){float L=lab.x;float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(C<=VIBRANCE_ABS_C_MIN||C<=1e-8f||_fabs(L)<=1e-6f)return 0.0f;float q=C/_fmaxf(_fabs(L),1e-6f);float q_gate=smootherstep(VIBRANCE_Q0,VIBRANCE_Q1,q);float margin_gate=smootherstep(VIBRANCE_MARGIN0,VIBRANCE_MARGIN1,margin);return q_gate*margin_gate;}
 __DEVICE__ float limit_positive_chroma_scale(float3 lab,float proposed_scale,float min_margin,int g){if(proposed_scale<=1.0f)return proposed_scale;float current_margin=native_gamut_margin_oklab(lab,g);if(current_margin<=min_margin)return 1.0f;float3 candidate=make_float3(lab.x,lab.y*proposed_scale,lab.z*proposed_scale);if(native_gamut_margin_oklab(candidate,g)>=min_margin)return proposed_scale;float lo=1.0f,hi=proposed_scale;for(int i=0;i<VIBRANCE_SEARCH_ITERS;i++){float mid=(lo+hi)*0.5f;float3 test_lab=make_float3(lab.x,lab.y*mid,lab.z*mid);if(native_gamut_margin_oklab(test_lab,g)>=min_margin)lo=mid;else hi=mid;}return lo;}
 __DEVICE__ float3 apply_vibrance(float3 lab,float vibr,int g){if(_fabs(vibr)<=1e-7f)return lab;float L=lab.x;float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(_fabs(L)<=1e-6f||C<=1e-8f)return lab;float margin=native_gamut_margin_oklab(lab,g);float activity=vibrance_activity(lab,margin);float v_eff=signed_square(vibr);float scale=_fmaxf(1.0f+VIBRANCE_MAX_CHANGE*v_eff*activity,0.0f);if(v_eff>0.0f)scale=limit_positive_chroma_scale(lab,scale,VIBRANCE_MIN_MARGIN,g);lab.y*=scale;lab.z*=scale;return lab;}
-
-// ---- OpenDRT-style Creative White ----
-// Exact D65->creative-white CAT matrix coefficients published in OpenDRT v1.1.0.
-// IMPORTANT: coefficients below are multiplied as ROWS, matching OpenDRT's vdot().
-// RC22 incorrectly fed those rows into Keystone's column-vector mmul helper.
-//
-// OpenDRT applies Creative White post-tonescale and blends it by:
-//     cwp_f = pow(tsn, 2*cwp_lm)
-// with default cwp_lm = 0.25.
-// Keystone is pre-ODT, so there is no true OpenDRT 'tsn'. We use a bounded,
-// monotonic scene-intensity proxy that maps 18% scene gray to 0.10 and approaches
-// 1.0 in strong highlights. This preserves OpenDRT's key behavior: shadows/mids
-// are less affected and whites/highlights converge most strongly to Creative White.
-__DEVICE__ float3 odrt_rowmul(
-    float3 v,
-    float r00,float r01,float r02,
-    float r10,float r11,float r12,
-    float r20,float r21,float r22)
-{
-  return make_float3(
-    r00*v.x+r01*v.y+r02*v.z,
-    r10*v.x+r11*v.y+r12*v.z,
-    r20*v.x+r21*v.y+r22*v.z);
-}
-
-__DEVICE__ float3 odrt_cat_d65(float3 xyz,int cwp){
-  if(cwp==0) // D93
-    return odrt_rowmul(xyz,
-      0.95703423023223877f,-0.0247171502560377121f,0.0624028593301773071f,
-      -0.0179296955466270447f,0.990019857883453369f,0.0248119533061981201f,
-      0.00127589143812656403f,0.00427919067442417058f,1.29345715045928955f);
-  if(cwp==1) // D75
-    return odrt_rowmul(xyz,
-      0.981001079082489014f,-0.0116619253531098366f,0.0265614092350006104f,
-      -0.00843488052487373352f,0.996506094932556152f,0.0105696544051170349f,
-      0.000552809564396739006f,0.00179840810596942902f,1.12374722957611084f);
-  if(cwp==2)return xyz; // D65
-  if(cwp==3) // D60
-    return odrt_rowmul(xyz,
-      1.01182246208190918f,0.00778879318386316299f,-0.0157783031463623047f,
-      0.00561682833358645439f,1.00150644779205322f,-0.00628517568111419678f,
-      -0.000335735734552145004f,-0.0010509500280022619f,0.927366673946380615f);
-  if(cwp==4) // D55
-    return odrt_rowmul(xyz,
-      1.02585089206695557f,0.0179439820349216461f,-0.0332137793302536011f,
-      0.0129133854061365128f,1.00214779376983643f,-0.0132421031594276428f,
-      -0.000719940289855003032f,-0.00218106806278228803f,0.84868013858795166f);
-  if(cwp==5) // D50
-    return odrt_rowmul(xyz,
-      1.04257404804229736f,0.03089117631316185f,-0.052812620997428894f,
-      0.0221935361623764038f,1.00185668468475342f,-0.0210737623274326324f,
-      -0.00116488314233720303f,-0.00342052709311246915f,0.761789083480834961f);
-  return xyz;
-}
-
-__DEVICE__ float odrt_scene_tsn(float Y){
-  if(Y<=0.0f)return 0.0f;
-  // k=1.62 gives tsn(0.18)=0.10 exactly.
-  return clampf(Y/(Y+1.62f),0.0f,1.0f);
-}
-
-__DEVICE__ float3 odrt_creative_white_preodt(float3 xyz,int cwp){
-  if(cwp==2||xyz.y<=1.0e-10f)return xyz;
-
-  float3 adapted=odrt_cat_d65(xyz,cwp);
-
-  // OpenDRT default Creative White Limit / cwp_lm is 0.25:
-  // cwp_f = pow(tsn, 0.5)
-  float tsn=odrt_scene_tsn(xyz.y);
-  float cwp_f=_sqrtf(tsn);
-
-  return xyz+(adapted-xyz)*make_float3(cwp_f,cwp_f,cwp_f);
-}
-
-// ---- Color Volume / luma-axis gamut compression ----
-// The native gamut is scene-referred and therefore has no meaningful fixed upper
-// RGB ceiling before the ODT. We consequently measure the chromaticity boundary
-// by the first native-linear channel to reach zero while moving away from the
-// neutral luma axis. This is exposure-relative, hue-dependent, and does NOT clamp
-// extended highlights to 1.0.
-
-__DEVICE__ float cv_native_boundary_scale(float3 rgb,float Y){
-  float3 gray=make_float3(Y,Y,Y);
-  float3 d=rgb-gray;
-  float s=1.0e10f;
-  const float eps=1.0e-7f;
-  if(d.x<-eps)s=_fminf(s,Y/(-d.x));
-  if(d.y<-eps)s=_fminf(s,Y/(-d.y));
-  if(d.z<-eps)s=_fminf(s,Y/(-d.z));
-  return _fmaxf(s,0.0f);
-}
-
-// Ratio of current chroma to the hue-dependent positive-primary boundary.
-// <1 = inside native chromaticity gamut, 1 = boundary, >1 = outside.
-__DEVICE__ float cv_native_stress_ratio(float3 xyz,int g){
-  float Y=xyz.y;
-  if(Y<=1.0e-10f)return 0.0f;
-  float3 rgb=xyz_to_native_linear(xyz,g);
-  float s=cv_native_boundary_scale(rgb,Y);
-  if(s>=1.0e9f)return 0.0f;
-  return 1.0f/_fmaxf(s,1.0e-6f);
-}
-
-// C1-continuous soft compression: unchanged at/below threshold and asymptotically
-// approaches the native boundary instead of clipping against it.
-__DEVICE__ float cv_soft_ratio(float ratio,float threshold){
-  float th=clampf(threshold,0.50f,0.98f);
-  if(ratio<=th)return ratio;
-  float span=_fmaxf(1.0f-th,1.0e-6f);
-  float x=(ratio-th)/span;
-  return th+span*(1.0f-_expf(-x));
-}
-
-__DEVICE__ float3 cv_scale_from_luma_axis(float3 xyz,int g,float scale){
-  float Y=xyz.y;
-  if(Y<=1.0e-10f)return xyz;
-  float3 rgb=xyz_to_native_linear(xyz,g);
-  float3 gray=make_float3(Y,Y,Y);
-  float3 out=gray+(rgb-gray)*make_float3(scale,scale,scale);
-  return native_linear_to_xyz(out,g);
-}
-
-// Restore as much of the original perceptual hue angle as the native positivity
-// boundary permits. This runs AFTER the luma-axis compression, so hue correction
-// cannot silently reintroduce a negative-primary failure.
-__DEVICE__ float3 cv_restore_hue_safe(float3 original_xyz,float3 compressed_xyz,int g){
-  if(original_xyz.y<=1.0e-10f||compressed_xyz.y<=1.0e-10f)return compressed_xyz;
-
-  float3 o=xyz_to_oklab(original_xyz);
-  float3 c=xyz_to_oklab(compressed_xyz);
-  float Co=_sqrtf(o.y*o.y+o.z*o.z);
-  float Cc=_sqrtf(c.y*c.y+c.z*c.z);
-  if(Co<=1.0e-8f||Cc<=1.0e-8f)return compressed_xyz;
-
-  float h=_atan2f(o.z,o.y);
-  float3 target_lab=make_float3(c.x,Cc*_cosf(h),Cc*_sinf(h));
-  float3 target_xyz=oklab_to_xyz_preserve_y_safe(target_lab,compressed_xyz.y);
-  float3 trgb=xyz_to_native_linear(target_xyz,g);
-
-  if(trgb.x>=-1.0e-7f&&trgb.y>=-1.0e-7f&&trgb.z>=-1.0e-7f)return target_xyz;
-
-  float lo=0.0f,hi=1.0f;
-  for(int i=0;i<10;i++){
-    float m=(lo+hi)*0.5f;
-    float3 test=compressed_xyz+(target_xyz-compressed_xyz)*make_float3(m,m,m);
-    float3 rgb=xyz_to_native_linear(test,g);
-    if(rgb.x>=-1.0e-7f&&rgb.y>=-1.0e-7f&&rgb.z>=-1.0e-7f)lo=m;else hi=m;
-  }
-  return compressed_xyz+(target_xyz-compressed_xyz)*make_float3(lo,lo,lo);
-}
-
-// Boundary-aware luma-axis gamut compression.
-// Luminance is preserved because the operation scales only the chroma vector
-// around an equal-RGB neutral with the same scene Y.
-__DEVICE__ float3 cv_apply_gamut_compression(float3 xyz,int g,float amount,float threshold){
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-7f||xyz.y<=1.0e-10f)return xyz;
-
-  float ratio=cv_native_stress_ratio(xyz,g);
-  if(ratio<=threshold)return xyz;
-
-  float desired=cv_soft_ratio(ratio,threshold);
-  float final_ratio=ratio+(desired-ratio)*a;
-  float scale=final_ratio/_fmaxf(ratio,1.0e-6f);
-
-  float3 compressed=cv_scale_from_luma_axis(xyz,g,scale);
-  return cv_restore_hue_safe(xyz,compressed,g);
-}
-
-// Highlight color-volume compression. No display peak is assumed. Instead the
-// control uses scene exposure and the same hue-dependent native boundary.
-// A color safely below the requested purity limit does not move.
-__DEVICE__ float3 cv_apply_highlight_volume(
-    float3 xyz,int g,float amount,float purity,float start_ev)
-{
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-7f||xyz.y<=1.0e-10f)return xyz;
-
-  float ev=_log2f(xyz.y/0.18f);
-  float hi=smootherstep(start_ev,start_ev+3.5f,ev);
-  if(hi<=1.0e-8f)return xyz;
-
-  float ratio=cv_native_stress_ratio(xyz,g);
-  float cap=clampf(purity,0.30f,1.00f);
-  if(ratio<=cap)return xyz;
-
-  // Smoothly approach the requested purity cap; do not hard-clip chroma.
-  float excess=(ratio-cap)/_fmaxf(1.0f-cap,1.0e-6f);
-  float engage=smootherstep(0.0f,1.0f,excess);
-  float target=cap+(ratio-cap)*(1.0f-engage);
-  float strength=a*hi;
-  float final_ratio=ratio+(target-ratio)*strength;
-  float scale=final_ratio/_fmaxf(ratio,1.0e-6f);
-
-  float3 compressed=cv_scale_from_luma_axis(xyz,g,scale);
-  return cv_restore_hue_safe(xyz,compressed,g);
-}
-
-__DEVICE__ float ks_cv_highlight_stress(float3 xyz,int g,float purity,float start_ev){
-  if(xyz.y<=1.0e-10f)return 0.0f;
-  float ev=_log2f(xyz.y/0.18f);
-  float hi=smootherstep(start_ev,start_ev+3.5f,ev);
-  float ratio=cv_native_stress_ratio(xyz,g);
-  float cap=clampf(purity,0.30f,1.00f);
-  float sat=smootherstep(cap*0.75f,cap,ratio);
-  return clampf(hi*sat,0.0f,1.0f);
-}
-
-__DEVICE__ float cv_compression_amount(float3 before_xyz,float3 after_xyz,int g){
-  if(before_xyz.y<=1.0e-10f)return 0.0f;
-  float Y=before_xyz.y;
-  float3 b=xyz_to_native_linear(before_xyz,g)-make_float3(Y,Y,Y);
-  float3 a=xyz_to_native_linear(after_xyz,g)-make_float3(Y,Y,Y);
-  float nb=_sqrtf(b.x*b.x+b.y*b.y+b.z*b.z);
-  float na=_sqrtf(a.x*a.x+a.y*a.y+a.z*a.z);
-  if(nb<=1.0e-10f)return 0.0f;
-  return clampf(1.0f-na/nb,0.0f,1.0f);
-}
-
-__DEVICE__ float3 cv_debug_mask(float m,int g,int tf,int logc3idx){
-  float v=clampf(m,0.0f,1.0f);
-  float3 neutral=make_float3(v,v,v);
-  return encode_native_ei(neutral,tf,logc3idx);
-}
-
 
 __DEVICE__ float3 compress_to_gamut(float3 rgb,float luminance){
   if(luminance<=0.0f)return rgb;
@@ -924,25 +798,77 @@ __DEVICE__ float3 technical_encode_domain_guard(float3 rgb,float Y){
   return n+d*make_float3(s,s,s);
 }
 
+// Final transfer-aware safety gate. A scene-linear value that looks merely extended can
+// encode to a catastrophic negative number in some log curves. For positive scene Y,
+// reduce only chroma (toward the equal-RGB neutral at the same Y) when final encoded RGB
+// would fall below -1.0. Ordinary extended negatives remain untouched.
+__DEVICE__ float3 technical_encoded_negative_guard(float3 rgb,float Y,int transfer_id,int logc3idx){
+  const float code_floor=-1.0f;
+  float3 enc=encode_native_ei(rgb,transfer_id,logc3idx);
+  float mn=_fminf(enc.x,_fminf(enc.y,enc.z));
+  if(mn>=code_floor)return rgb;
+
+  // Positive scene luminance: preserve Y exactly by reducing chroma toward equal-RGB neutral.
+  if(Y>1.0e-10f){
+    float3 neutral=make_float3(Y,Y,Y);
+    float3 delta=rgb-neutral;
+    float3 neutral_enc=encode_native_ei(neutral,transfer_id,logc3idx);
+    float neutral_min=_fminf(neutral_enc.x,_fminf(neutral_enc.y,neutral_enc.z));
+    if(neutral_min>=code_floor){
+      float lo=0.0f,hi=1.0f;
+      for(int i=0;i<14;i++){
+        float mid=(lo+hi)*0.5f;
+        float3 candidate=neutral+delta*make_float3(mid,mid,mid);
+        float3 candidate_enc=encode_native_ei(candidate,transfer_id,logc3idx);
+        float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
+        if(candidate_min>=code_floor)lo=mid;else hi=mid;
+      }
+      return neutral+delta*make_float3(lo,lo,lo);
+    }
+  }
+
+  // Imaginary/negative-Y RGB cannot be moved to an equal-RGB neutral while preserving Y.
+  // Fall back to a uniform scale toward black, preserving RGB ratios and avoiding a hard clip.
+  float3 black=make_float3(0.0f,0.0f,0.0f);
+  float3 black_enc=encode_native_ei(black,transfer_id,logc3idx);
+  float black_min=_fminf(black_enc.x,_fminf(black_enc.y,black_enc.z));
+  if(black_min<code_floor)return black;
+  float lo=0.0f,hi=1.0f;
+  for(int i=0;i<14;i++){
+    float mid=(lo+hi)*0.5f;
+    float3 candidate=rgb*make_float3(mid,mid,mid);
+    float3 candidate_enc=encode_native_ei(candidate,transfer_id,logc3idx);
+    float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
+    if(candidate_min>=code_floor)lo=mid;else hi=mid;
+  }
+  return rgb*make_float3(lo,lo,lo);
+}
+
+// Catastrophic-only final encoded guard. This runs after encoded-domain modules such as
+// ME_Desatch, which can otherwise reintroduce very large negative code values after the
+// scene-linear safety pass. Values at or above -1.0 are returned unchanged.
+__DEVICE__ float3 technical_final_encoded_guard(float3 code,int transfer_id,int logc3idx){
+  const float code_floor=-1.0f;
+  float mn=_fminf(code.x,_fminf(code.y,code.z));
+  if(mn>=code_floor)return code;
+  float3 black=encode_native_ei(make_float3(0.0f,0.0f,0.0f),transfer_id,logc3idx);
+  float black_min=_fminf(black.x,_fminf(black.y,black.z));
+  if(black_min<code_floor)return black;
+  float3 d=code-black;
+  float s=1.0f;
+  if(code.x<code_floor&&d.x<0.0f)s=_fminf(s,(code_floor-black.x)/d.x);
+  if(code.y<code_floor&&d.y<0.0f)s=_fminf(s,(code_floor-black.y)/d.y);
+  if(code.z<code_floor&&d.z<0.0f)s=_fminf(s,(code_floor-black.z)/d.z);
+  s=clampf(s,0.0f,1.0f);
+  return black+d*make_float3(s,s,s);
+}
+
 // ---- Input Gamut Heal: ACES 1.3 RGC core in AP1 wrapper ----
 // Optional technical input repair only; AP1 is a local reference-operator domain, not Keystone's working space.
 __DEVICE__ float rgc_comp_dist(float dn,float t,float ss){if(dn<t)return dn;float x=(dn-t)/ss;float dp=_powf(_fmaxf(x,0.0f),1.2f);return t+(dn-t)/_powf(1.0f+dp,1.0f/1.2f);}
 __DEVICE__ float3 rgc_core_ap1(float3 rgb){float A=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z));float aa=_fabs(A);if(aa<=1e-12f)return rgb;float dnR=(A-rgb.x)/aa,dnG=(A-rgb.y)/aa,dnB=(A-rgb.z)/aa;float dcR=rgc_comp_dist(dnR,0.815f,0.327301877468f);float dcG=rgc_comp_dist(dnG,0.803f,0.285938028927f);float dcB=rgc_comp_dist(dnB,0.880f,0.146821457838f);return make_float3(A-dcR*aa,A-dcG*aa,A-dcB*aa);}
 __DEVICE__ float3 input_gamut_heal_xyz(float3 xyz){float3 ap1=mmul(X65_TO_AP1_C0,X65_TO_AP1_C1,X65_TO_AP1_C2,xyz);ap1=rgc_core_ap1(ap1);return mmul(AP1_TO_X65_C0,AP1_TO_X65_C1,AP1_TO_X65_C2,ap1);}
 
-// ---- Scene-stop Midtones ----
-// Primary Contrast is handled separately by apply_resolve_style_contrast_xyz().
-// HDR-safe Lift / Gamma / Gain in scene stops. Unlike 0-1 display-referred primaries,
-// these masks are defined around 18% scene grey and remain valid for values far above 1.0.
-// The three ranges overlap deliberately, matching the useful grading behavior of primary
-// Lift/Gamma/Gain without clipping or normalizing HDR scene-linear values.
-// ---- Dynamic Range ----
-// Monotonic logarithmic shoulder in scene-stop space. The derivative is 1.0 at the
-// knee and remains positive above it, so highlight ordering cannot invert.
-// Scene-stop range repair. All changes are luminance-only XYZ scaling, preserving
-// positive-Y chromaticity. Shadow Recovery uses a broad smooth window so the
-// deepest blacks (< -9 EV from 18% grey) remain anchored and the mapping remains
-// monotonic even at 1.0. Highlight and specular stages use monotonic log shoulders.
 // ---- Skin helpers ----
 
 __DEVICE__ float deg_to_rad(float d){return d*(2.0f*PI)/360.0f;}
@@ -1059,6 +985,11 @@ __DEVICE__ float3 apply_me_desatch_exact(float3 rgb,float gs,float rs,float grs,
 __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,float p_G,float p_B){
   // Clamp all parameters to ranges that mirror DEFINE_UI_PARAMS.
   float c_temp=clampf(temp,-100.0f,100.0f), c_tint=clampf(tint,-100.0f,100.0f);
+  int raw_fns=(int)(fns_mode+0.5f); int c_fns=(raw_fns==1)?1:0;
+  float c_fns_mid_in=clampf(fns_mid_in,0.01f,1.0f), c_fns_mid_out=clampf(fns_mid_out,0.01f,1.0f);
+  float c_fns_below=clampf(fns_contrast_below,0.1f,3.0f), c_fns_above=clampf(fns_contrast_above,0.1f,3.0f);
+  float c_fns_blend=clampf(fns_blend_width,0.0f,0.5f);
+  float c_fns_pr=clampf(fns_printer_r,0.0f,50.0f), c_fns_pg=clampf(fns_printer_g,0.0f,50.0f), c_fns_pb=clampf(fns_printer_b,0.0f,50.0f);
   float c_p_exposure=clampf(p_exposure,-6.0f,6.0f);
   float c_p_bp=clampf(p_bp,-0.05f,0.05f);
   float c_p_contrast=clampf(p_contrast,0.5f,2.0f);
@@ -1068,13 +999,6 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   float c_p_high_soft=clampf(p_high_soft,0.0f,2.0f);
   float c_chroma=clampf(chroma,0.0f,2.0f), c_hue=clampf(hue_rotate,-180.0f,180.0f);
   float c_vibrance=clampf(vibrance,-1.0f,1.0f), c_midtone_chroma=clampf(midtone_chroma,0.0f,1.0f);
-  float c_cv_gamut=clampf(cv_gamut_compression,0.0f,1.0f);
-  float c_cv_threshold=clampf(cv_gamut_threshold,0.50f,0.98f);
-  float c_cv_highlight=clampf(cv_highlight_volume,0.0f,1.0f);
-  float c_cv_purity=clampf(cv_highlight_purity,0.30f,1.00f);
-  float c_cv_start=clampf(cv_highlight_start,-1.0f,4.0f);
-  int raw_cv_view=(int)(cv_view+0.5f);int c_cv_view=(raw_cv_view>=0&&raw_cv_view<=3)?raw_cv_view:0;
-  int raw_wp=(int)(creative_whitepoint+0.5f);int c_wp=(raw_wp>=0&&raw_wp<=5)?raw_wp:2;
   float c_warm_target=clampf(warm_target,-25.0f,25.0f);
   float c_warm_hue=clampf(warm_hue_shift,-25.0f,25.0f), c_warm_chroma=clampf(warm_chroma,0.50f,1.50f);
   float c_warm_exposure=clampf(warm_exposure,-0.50f,0.50f), c_warm_evenness=clampf(warm_evenness,0.0f,1.0f);
@@ -1097,7 +1021,7 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   else if(sp==9){g=7;ti_tf=9;}else if(sp==10){g=9;ti_tf=10;}else if(sp==11){g=10;ti_tf=13;}else if(sp==12){g=8;ti_tf=11;}
   else if(sp==13){g=8;ti_tf=14;}else if(sp==14){g=0;ti_tf=11;}else if(sp==15){g=12;ti_tf=3;}else if(sp==16){g=10;ti_tf=16;}else if(sp==17){g=10;ti_tf=17;}
 
-  bool base_neutral=c_heal==0&&_fabs(c_temp)<=1e-7f&&_fabs(c_tint)<=1e-7f&&_fabs(c_balr)<=1e-7f&&_fabs(c_balg)<=1e-7f&&_fabs(c_balb)<=1e-7f&&_fabs(c_midtone_chroma)<=1e-7f&&c_cv_gamut<=1e-7f&&c_cv_highlight<=1e-7f&&c_cv_view==0&&c_wp==2&&_fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&_fabs(c_p_contrast-1.0f)<=1e-7f&&_fabs(c_p_pivot)<=1e-7f&&_fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&c_p_high_soft<=1e-7f&&_fabs(c_chroma-1.0f)<=1e-7f&&_fabs(c_vibrance)<=1e-7f&&_fabs(c_hue)<=1e-7f&&_fabs(c_warm_hue)<=1e-7f&&_fabs(c_warm_chroma-1.0f)<=1e-7f&&_fabs(c_warm_exposure)<=1e-7f&&_fabs(c_warm_evenness)<=1e-7f&&c_negcompress<=1e-7f&&c_blackclean<=1e-7f;
+  bool base_neutral=c_heal==0&&_fabs(c_temp)<=1e-7f&&_fabs(c_tint)<=1e-7f&&_fabs(c_balr)<=1e-7f&&_fabs(c_balg)<=1e-7f&&_fabs(c_balb)<=1e-7f&&_fabs(c_midtone_chroma)<=1e-7f&&_fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&_fabs(c_p_contrast-1.0f)<=1e-7f&&_fabs(c_p_pivot)<=1e-7f&&_fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&c_p_high_soft<=1e-7f&&_fabs(c_chroma-1.0f)<=1e-7f&&_fabs(c_vibrance)<=1e-7f&&_fabs(c_hue)<=1e-7f&&_fabs(c_warm_hue)<=1e-7f&&_fabs(c_warm_chroma-1.0f)<=1e-7f&&_fabs(c_warm_exposure)<=1e-7f&&_fabs(c_warm_evenness)<=1e-7f&&c_negcompress<=1e-7f&&c_blackclean<=1e-7f;
   if(base_neutral){
     if(!desatch_active)return make_float3(p_R,p_G,p_B);
     float3 exact_only=apply_me_desatch_exact(make_float3(p_R,p_G,p_B),c_global_sat,c_r_sat,c_g_sat,c_b_sat,c_c_sat,c_m_sat,c_y_sat);
@@ -1126,7 +1050,18 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
     xyz=native_rgb_balance_xyz(xyz,g,c_balr,c_balg,c_balb);
 
   // ============================================================
-  // Primera v0.5.5 Exposure / Tone block
+  // Internal Film Negative Space: ENTER
+  // ============================================================
+  // This reproduces the topology of an external Forward -> grade -> Invert sandwich.
+  // WB/input repair/native balance are technical and remain outside the sandwich.
+  if(c_fns==1){
+    float3 fns_native=xyz_to_native_linear(xyz,g);
+    fns_native=fns_forward_rgb(fns_native,c_fns_mid_in,c_fns_mid_out,c_fns_below,c_fns_above,c_fns_blend,c_fns_pr,c_fns_pg,c_fns_pb);
+    xyz=native_linear_to_xyz(fns_native,g);
+  }
+
+  // ============================================================
+  // Primera-derived Exposure / Tone block
   // ============================================================
   // Move from XYZ into the selected native-linear gamut because Primera performs
   // Exposure and Black Point before re-encoding to the selected transfer.
@@ -1150,8 +1085,8 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
     primera_lin.z=primera_soft_black_point(primera_lin.z,bp,knee);
   }
 
-  // Primera Contrast / Pivot / Shadows / Highlights / Roll Off EXACT equations,
-  // routed through Keystone's already-selected transfer function.
+  // Primera-derived Contrast / Pivot / Shadows / Highlights / Roll Off block,
+  // routed through Keystone's selected transfer. RC26 uses the monotonic Highlights fix.
   if(_fabs(c_p_contrast-1.0f)>1e-7f||_fabs(c_p_pivot)>1e-7f||
      _fabs(c_p_shadows)>1e-7f||_fabs(c_p_highlights)>1e-7f||c_p_high_soft>1e-7f)
     primera_lin=apply_primera_encoded_tone(
@@ -1172,8 +1107,7 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   if(_fabs(c_vibrance)>1e-7f)lab=apply_vibrance(lab,c_vibrance,g);
 
 
-  // Midtone Chroma remains a creative color control. Highlight color handling
-  // has moved to the boundary-aware Color Volume section below.
+  // Midtone Chroma remains a creative color control.
   float current_ev=xyz.y>1.0e-10f?_log2f(xyz.y/0.18f):-20.0f;
   if(c_midtone_chroma>1e-7f){float mdMask=smootherstep(-2.5f,-0.5f,current_ev)*(1.0f-smootherstep(1.0f,3.0f,current_ev));float md=1.0f+c_midtone_chroma*mdMask*0.3f;lab.y*=md;lab.z*=md;}
 
@@ -1207,33 +1141,16 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   if(_fabs(c_warm_exposure)>1e-7f&&skin_exposure_mask>1e-8f){float k=_powf(2.0f,c_warm_exposure*skin_exposure_mask);graded_xyz*=make_float3(k,k,k);}
 
   // ============================================================
-  // COLOR VOLUME
+  // Internal Film Negative Space: EXIT
   // ============================================================
-  // Diagnostics measure the fully graded state before Color Volume modifies it.
-  float3 cv_before=graded_xyz;
-  float cv_stress=cv_native_stress_ratio(cv_before,g);
-  float cv_hi_stress=ks_cv_highlight_stress(cv_before,g,c_cv_purity,c_cv_start);
-
-  // Picture-formation-inspired purity management, intentionally WITHOUT a display
-  // tone scale or peak-nit assumption. Highlight volume runs first; technical
-  // gamut compression then catches colors approaching or exceeding native gamut.
-  if(c_cv_highlight>1e-7f)
-    graded_xyz=cv_apply_highlight_volume(graded_xyz,g,c_cv_highlight,c_cv_purity,c_cv_start);
-  if(c_cv_gamut>1e-7f)
-    graded_xyz=cv_apply_gamut_compression(graded_xyz,g,c_cv_gamut,c_cv_threshold);
-
-  float cv_comp=cv_compression_amount(cv_before,graded_xyz,g);
-
-  if(c_cv_view==1){
-    // 0 at low stress, white at/outside the native chromaticity boundary.
-    float m=smootherstep(c_cv_threshold,1.0f,cv_stress);
-    return cv_debug_mask(m,g,ti_tf,c_logc3ei);
+  // Invert the exact working-space map before technical cleanup and output safety.
+  if(c_fns==1){
+    float3 fns_native=xyz_to_native_linear(graded_xyz,g);
+    fns_native=fns_inverse_rgb(fns_native,c_fns_mid_in,c_fns_mid_out,c_fns_below,c_fns_above,c_fns_blend,c_fns_pr,c_fns_pg,c_fns_pb);
+    fns_native=fns_scene_ceiling_guard(fns_native);
+    graded_xyz=native_linear_to_xyz(fns_native,g);
   }
-  if(c_cv_view==2)return cv_debug_mask(cv_comp,g,ti_tf,c_logc3ei);
-  if(c_cv_view==3)return cv_debug_mask(cv_hi_stress,g,ti_tf,c_logc3ei);
 
-  // OpenDRT-style Creative White adaptation, pre-ODT approximation.
-  if(c_wp!=2)graded_xyz=odrt_creative_white_preodt(graded_xyz,c_wp);
 
   // Output cleanup. White and black neutralization are independent and preserve
   // scene Y. Skin Protect attenuates only the creative neutralization. The technical
@@ -1251,8 +1168,10 @@ __DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,f
   float3 cam=xyz_to_native_linear(graded_xyz,g);
   cam=technical_encode_domain_guard(cam,graded_xyz.y);
   if(c_gamutclean>1e-7f){float3 safe=compress_to_gamut(cam,graded_xyz.y);cam=cam+(safe-cam)*c_gamutclean;}
+  cam=technical_encoded_negative_guard(cam,graded_xyz.y,ti_tf,c_logc3ei);
   float3 result=encode_native_ei(cam,ti_tf,c_logc3ei);
   if(desatch_active)result=apply_me_desatch_exact(result,c_global_sat,c_r_sat,c_g_sat,c_b_sat,c_c_sat,c_m_sat,c_y_sat);
+  result=technical_final_encoded_guard(result,ti_tf,c_logc3ei);
 
   // Last-resort finite guard only. Validation must fail on any upstream NaN/Inf before this point.
   float nx=finite_or_zero(result.x);
