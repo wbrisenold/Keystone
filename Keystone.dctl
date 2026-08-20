@@ -1,0 +1,1065 @@
+// Keystone v1.9.4
+// DaVinci Resolve DCTL grading tool for ARRI Wide Gamut 3 / LogC3 EI800.
+//
+// Working domain:
+//   Input and output: AWG3 / LogC3 EI800
+//   Internal scene processing: AWG3 linear / XYZ D65 / Oklab as appropriate
+//
+// Main controls:
+//   Input Repair
+//   HDR-style WB Hue / Amount
+//   Film-negative printer lights
+//   Exposure / Black / Contrast / Shadows / Highlights / Roll Off
+//   Saturation
+//   Skin Range / Hue / Saturation / Density / Evenness / Separation
+//   Shadow / Highlight split tone
+//   White / Black cleanup
+//
+// Current processing order:
+//   Input Repair
+//   -> WB
+//   -> Exposure
+//   -> Printer Lights
+//   -> Black
+//   -> Daniele Contrast
+//   -> Shadows / Highlights
+//   -> Roll Off
+//   -> Saturation
+//   -> Skin Controls
+//   -> Split Tone
+//   -> White Clean / Black Clean
+//   -> Technical Safety
+//   -> LogC3 EI800
+//
+// Creative defaults are intended as a direct bypass.
+// Keystone does NOT include an ODT.
+//
+// Third-party notices are included in THIRD_PARTY_NOTICES.md.
+// The Daniele tone-scale core follows Thatcher Freeman's MIT-licensed
+// utility-dctls implementation, based on Daniele Siragusano's tone-scale proposal.
+// The optional input repair implements an ACES 1.3 Reference Gamut Compression core.
+// Skin-control design was informed by the MIT-licensed PrimeraSkin workflow.
+//
+// Runtime note:
+// Static validation cannot replace compiling this file inside DaVinci Resolve.
+// See tools/validate.py and .github/workflows/validate.yml.
+
+// ---- ARRI Wide Gamut 3 -> XYZ D65 ----
+#define R2_C0 make_float3(0.638008f,0.291954f,0.002798f)
+#define R2_C1 make_float3(0.214704f,0.823841f,-0.067034f)
+#define R2_C2 make_float3(0.097744f,-0.115795f,1.153294f)
+
+// ---- Bradford CAT + D65 reference white ----
+#define WHITE_D65 make_float3(0.9504559271f,1.0f,1.0890577508f)
+#define BRADFORD_C0 make_float3(0.8951000000f,-0.7502000000f,0.0389000000f)
+#define BRADFORD_C1 make_float3(0.2664000000f,1.7135000000f,-0.0685000000f)
+#define BRADFORD_C2 make_float3(-0.1614000000f,0.0367000000f,1.0296000000f)
+#define BRADFORD_INV_C0 make_float3(0.9869929055f,0.4323052697f,-0.0085286646f)
+#define BRADFORD_INV_C1 make_float3(-0.1470542564f,0.5183602715f,0.0400428217f)
+#define BRADFORD_INV_C2 make_float3(0.1599626517f,0.0492912282f,0.9684866958f)
+
+// ---- XYZ D65 -> ARRI Wide Gamut 3 ----
+#define G2_C0 make_float3(1.789064538025f,-0.639848741771f,-0.041530974004f)
+#define G2_C1 make_float3(-0.482533816466f,1.396400099532f,0.082334958727f)
+#define G2_C2 make_float3(-0.200075026387f,0.194432230586f,0.878868163772f)
+
+// ---- OKLab: XYZ D65 <-> OKLab direct precombined matrices ----
+// Direct XYZ D65 <-> Oklab matrices used by the active perceptual operators.
+#define X65_TO_OKLMS_C0 make_float3(0.8190224432f,0.0329836672f,0.0481771996f)
+#define X65_TO_OKLMS_C1 make_float3(0.3619062563f,0.9292868469f,0.2642395197f)
+#define X65_TO_OKLMS_C2 make_float3(-0.1288737826f,0.0361446682f,0.6335478285f)
+#define OKLMS3_TO_X65_C0 make_float3(1.2268798734f,-0.0405757646f,-0.0763729497f)
+#define OKLMS3_TO_X65_C1 make_float3(-0.5578150037f,1.1122868294f,-0.4214933239f)
+#define OKLMS3_TO_X65_C2 make_float3(0.2813910502f,-0.0717110667f,1.5869240244f)
+
+// ---- OKLab ----
+#define O_C0 make_float3(0.2104542553f,1.9779984951f,0.0259040371f)
+#define O_C1 make_float3(0.793617785f,-2.428592205f,0.7827717662f)
+#define O_C2 make_float3(-0.0040720468f,0.4505937099f,-0.808675766f)
+#define P_C0 make_float3(1.0f,1.0f,1.0f)
+#define P_C1 make_float3(0.3963377774f,-0.1055613458f,-0.0894841775f)
+#define P_C2 make_float3(0.2158037573f,-0.0638541728f,-1.291485548f)
+// AP1 wrapper matrices used only by optional ACES 1.3 RGC.
+#define X65_TO_AP1_C0 make_float3(1.645137477880f,-0.663190970565f,0.011827536679f)
+#define X65_TO_AP1_C1 make_float3(-0.305728269983f,1.605239925856f,-0.011607564142f)
+#define X65_TO_AP1_C2 make_float3(-0.236812415835f,0.023041811312f,0.918561032294f)
+#define AP1_TO_X65_C0 make_float3(0.657631916906f,0.271767176760f,-0.005033538330f)
+#define AP1_TO_X65_C1 make_float3(0.126453267991f,0.675103815523f,0.006902836343f)
+#define AP1_TO_X65_C2 make_float3(0.166370741628f,0.053129008203f,1.087188452940f)
+
+// ---- LogC3 EI800 + WB constants ----
+#define LOGC3_CUT 0.010591f
+#define LOGC3_A 5.555556f
+#define LOGC3_B 0.052272f
+#define LOGC3_C 0.24719f
+#define LOGC3_D 0.385537f
+#define LOGC3_E 5.367655f
+#define LOGC3_F 0.092809f
+#define WB_WHEEL_MAX_CHROMA 0.080f
+#define LN2 0.6931471805599453094f
+
+// ---- INPUT ----
+DEFINE_UI_PARAMS(input_gamut_heal, Input / Fix, DCTLUI_COMBO_BOX, 0, {heal_off,heal_aces_rgc},{Off,ACES 1.3 RGC})
+
+// ---- WB ----
+DEFINE_UI_PARAMS(wb_hue, WB / Hue, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 360.0, 1.0)
+DEFINE_UI_PARAMS(wb_amount, WB / Amt, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
+
+// ---- NEGATIVE DEVELOPMENT ----
+// Keystone's negative response is fixed technical plumbing; only live printer lights are exposed.
+DEFINE_UI_PARAMS(fns_printer_r, Neg / R, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_g, Neg / G, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_b, Neg / B, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+
+// ---- TONE ----
+// Exposure is true scene-linear stops. Daniele technical anchors are fixed for LogC3 EI800.
+DEFINE_UI_PARAMS(p_exposure, Tone / Exp, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.01)
+DEFINE_UI_PARAMS(p_bp, Tone / Black, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
+DEFINE_UI_PARAMS(p_contrast, Tone / Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.01)
+DEFINE_UI_PARAMS(p_shadows, Tone / Shadows, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(p_highlights, Tone / Highlights, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(p_high_soft, Tone / Roll, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 2.0, 0.01)
+
+// ---- COLOR ----
+DEFINE_UI_PARAMS(saturation, Color / Sat, DCTLUI_SLIDER_FLOAT, 1.0, 0.0, 2.0, 0.005)
+DEFINE_UI_PARAMS(skin_range, Skin / Range, DCTLUI_SLIDER_FLOAT, 1.0, 0.25, 2.0, 0.01)
+DEFINE_UI_PARAMS(skin_hue, Skin / Hue, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(skin_sat, Skin / Sat, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(skin_density, Skin / Dense, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(skin_evenness, Skin / Even, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(skin_separation, Skin / Sep, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(split_shadow_hue, Split / Sh Hue, DCTLUI_SLIDER_FLOAT, 200.0, 0.0, 360.0, 1.0)
+DEFINE_UI_PARAMS(split_shadow_amount, Split / Sh Amt, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(split_highlight_hue, Split / Hi Hue, DCTLUI_SLIDER_FLOAT, 45.0, 0.0, 360.0, 1.0)
+DEFINE_UI_PARAMS(split_highlight_amount, Split / Hi Amt, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+
+// ---- OUTPUT ----
+DEFINE_UI_PARAMS(white_gamut_clean, Out / White, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(black_gamut_clean, Out / Black, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+
+// ---- Helpers ----
+__DEVICE__ float clampf(float v, float lo, float hi) { return _fmaxf(lo, _fminf(hi, v)); }
+__DEVICE__ float3 mmul(float3 c0,float3 c1,float3 c2,float3 v){return make_float3(c0.x*v.x+c1.x*v.y+c2.x*v.z,c0.y*v.x+c1.y*v.y+c2.y*v.z,c0.z*v.x+c1.z*v.y+c2.z*v.z);}
+__DEVICE__ float cbrt_s(float x){return(x<0.0f?-1.0f:1.0f)*_powf(_fabs(x),1.0f/3.0f);}
+__DEVICE__ int finitef(float x){return (x==x&&_fabs(x)<3.402823e38f)?1:0;}
+// ---- Fixed Studio gamut: ARRI Wide Gamut 3 <-> XYZ D65 ----
+__DEVICE__ float3 awg3_to_xyz(float3 v){return mmul(R2_C0,R2_C1,R2_C2,v);}
+__DEVICE__ float3 xyz_to_awg3(float3 v){return mmul(G2_C0,G2_C1,G2_C2,v);}
+
+// ---- Fixed ARRI LogC3 EI800 ----
+__DEVICE__ float logc3_decode_ei800_scalar(float t){
+  float cv=LOGC3_E*LOGC3_CUT+LOGC3_F;
+  return t>cv?(_powf(10.0f,(t-LOGC3_D)/LOGC3_C)-LOGC3_B)/LOGC3_A:(t-LOGC3_F)/LOGC3_E;
+}
+__DEVICE__ float logc3_encode_ei800_scalar(float x){
+  return x>LOGC3_CUT?LOGC3_C*_log10f(LOGC3_A*x+LOGC3_B)+LOGC3_D:LOGC3_E*x+LOGC3_F;
+}
+__DEVICE__ float3 logc3_decode_ei800(float3 v){
+  return make_float3(logc3_decode_ei800_scalar(v.x),logc3_decode_ei800_scalar(v.y),logc3_decode_ei800_scalar(v.z));
+}
+__DEVICE__ float3 logc3_encode_ei800(float3 v){
+  return make_float3(logc3_encode_ei800_scalar(v.x),logc3_encode_ei800_scalar(v.y),logc3_encode_ei800_scalar(v.z));
+}
+
+__DEVICE__ float smootherstep(float e0,float e1,float x){float span=e1-e0;if(span<=1e-12f)return x>=e1?1.0f:0.0f;x=clampf((x-e0)/span,0.0f,1.0f);return x*x*x*(x*(x*6.0f-15.0f)+10.0f);}
+
+// ---- OKLab ----
+__DEVICE__ float3 xyz_to_oklab(float3 xyz){float3 lms=mmul(X65_TO_OKLMS_C0,X65_TO_OKLMS_C1,X65_TO_OKLMS_C2,xyz);lms=make_float3(cbrt_s(lms.x),cbrt_s(lms.y),cbrt_s(lms.z));return mmul(O_C0,O_C1,O_C2,lms);}
+__DEVICE__ float3 oklab_to_xyz(float3 lab){float3 lms=mmul(P_C0,P_C1,P_C2,lab);lms=make_float3(lms.x*lms.x*lms.x,lms.y*lms.y*lms.y,lms.z*lms.z*lms.z);return mmul(OKLMS3_TO_X65_C0,OKLMS3_TO_X65_C1,OKLMS3_TO_X65_C2,lms);}
+__DEVICE__ float3 oklab_to_xyz_preserve_y_safe(float3 lab,float targetY){
+  float3 out=oklab_to_xyz(lab);
+  if(targetY<=1.0e-20f)return out;
+  if(out.y<=1.0e-10f){
+    float lo=0.0f,hi=1.0f;
+    for(int i=0;i<20;i++){
+      float mid=(lo+hi)*0.5f;
+      float3 test=make_float3(lab.x,lab.y*mid,lab.z*mid);
+      float y=oklab_to_xyz(test).y;
+      if(y>targetY*1.0e-8f)lo=mid;else hi=mid;
+    }
+    lab.y*=lo;lab.z*=lo;out=oklab_to_xyz(lab);
+  }
+  if(out.y<=1.0e-20f)return make_float3(WHITE_D65.x*targetY,targetY,WHITE_D65.z*targetY);
+  float k=targetY/out.y;
+  return out*make_float3(k,k,k);
+}
+
+// ---- HDR-style wheel white balance via Bradford chromatic adaptation ----
+// Resolve DCTL cannot expose a literal 2D color wheel, so Keystone uses:
+//
+//   WB / Hue : 0..360 degrees
+//   WB / Amt : 0..1
+//
+// Hue chooses the direction around the WB wheel. Amount chooses distance from
+// neutral. This is not an RGB tint. The selected direction defines a source
+// white around D65 in Oklab; Bradford CAT adapts that source white back to D65.
+//
+// Amount uses a squared response for fine control close to neutral.
+__DEVICE__ float3 wb_source_white_hdr_xyz(float hue_deg,float amount_value){
+  float amount=clampf(amount_value,0.0f,1.0f);
+  if(amount<=1.0e-7f)return WHITE_D65;
+
+  float t=hue_deg*0.017453292519943295f;
+  float r=WB_WHEEL_MAX_CHROMA*amount*amount;
+
+  float3 white_lab=xyz_to_oklab(WHITE_D65);
+  float3 src_lab=make_float3(
+    white_lab.x,
+    white_lab.y+r*_cosf(t),
+    white_lab.z+r*_sinf(t));
+
+  float3 src_xyz=oklab_to_xyz(src_lab);
+  if(!finitef(src_xyz.x)||!finitef(src_xyz.y)||!finitef(src_xyz.z))return WHITE_D65;
+  if(src_xyz.y<=1.0e-6f||src_xyz.x<=0.0f||src_xyz.z<=0.0f)return WHITE_D65;
+
+  float k=1.0f/src_xyz.y;
+  return src_xyz*make_float3(k,k,k);
+}
+__DEVICE__ float3 bradford_cone(float3 xyz){return mmul(BRADFORD_C0,BRADFORD_C1,BRADFORD_C2,xyz);}
+__DEVICE__ float3 bradford_from_cone(float3 lms){return mmul(BRADFORD_INV_C0,BRADFORD_INV_C1,BRADFORD_INV_C2,lms);}
+__DEVICE__ float wb_cat_ratio(float dst,float src){
+  if(_fabs(src)<=1.0e-8f)return 1.0f;
+  return clampf(dst/src,0.10f,10.0f);
+}
+__DEVICE__ float3 apply_bradford_wb_xyz(float3 xyz,float hue_value,float amount_value){
+  float amount=clampf(amount_value,0.0f,1.0f);
+  if(amount<=1.0e-7f)return xyz;
+
+  float3 source_white=wb_source_white_hdr_xyz(hue_value,amount);
+  float3 src_lms=bradford_cone(source_white);
+  float3 dst_lms=bradford_cone(WHITE_D65);
+  float3 scale=make_float3(
+    wb_cat_ratio(dst_lms.x,src_lms.x),
+    wb_cat_ratio(dst_lms.y,src_lms.y),
+    wb_cat_ratio(dst_lms.z,src_lms.z));
+
+  float3 cone=bradford_cone(xyz);
+  float3 adapted=bradford_from_cone(make_float3(cone.x*scale.x,cone.y*scale.y,cone.z*scale.z));
+
+  float3 d65_cone=bradford_cone(WHITE_D65);
+  float3 d65_test=bradford_from_cone(make_float3(
+    d65_cone.x*scale.x,
+    d65_cone.y*scale.y,
+    d65_cone.z*scale.z));
+
+  if(d65_test.y>1.0e-8f){
+    float k=1.0f/d65_test.y;
+    adapted=adapted*make_float3(k,k,k);
+  }
+  return adapted;
+}
+
+// ---- Internal Film Negative Space working-space helpers ----
+// Public behavior matched at the signal-model level:
+//   scene-linear pivot remap, independent power above/below middle gray,
+//   optional smooth transition around the pivot, printer-light density offsets,
+//   and an exact inverse around Keystone's creative block.
+// This is Keystone's own implementation; it does not copy the external DCTL source.
+#define KEYSTONE_FNS_MID_IN 0.18f
+#define KEYSTONE_FNS_MID_OUT 0.42f
+#define KEYSTONE_FNS_BELOW 0.85f
+#define KEYSTONE_FNS_ABOVE 0.75f
+#define KEYSTONE_FNS_BLEND 0.30f
+
+__DEVICE__ float fns_printer_gain(float point){
+  // One printer point represents 0.025 log10 exposure-density units. Neutral is 25.
+  float density=(point-25.0f)*0.025f;
+  return _powf(10.0f,density);
+}
+__DEVICE__ float fns_smooth_integral(float q){return q*q*q-0.5f*q*q*q*q;}
+__DEVICE__ float fns_log_response(float stop,float below,float above,float blend){
+  if(blend<=1.0e-7f)return stop<0.0f?below*stop:above*stop;
+  float d=above-below;
+  float F0=fns_smooth_integral(0.5f);
+  if(stop<=-blend){
+    float q=0.0f;
+    float vb=below*(-blend)+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+    return vb+below*(stop+blend);
+  }
+  if(stop>=blend){
+    float q=1.0f;
+    float vb=below*blend+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+    return vb+above*(stop-blend);
+  }
+  float q=(stop+blend)/(2.0f*blend);
+  return below*stop+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+}
+__DEVICE__ float fns_forward_characteristic(float x,float mid_in,float mid_out,float below,float above,float blend){
+  float scale=mid_out/_fmaxf(mid_in,1.0e-8f);
+  if(x<=0.0f)return x*scale;
+  float ratio=x/_fmaxf(mid_in,1.0e-8f);
+  float stop=_log2f(_fmaxf(ratio,1.0e-20f));
+  float out_stop=fns_log_response(stop,below,above,blend);
+  out_stop=clampf(out_stop,-120.0f,120.0f);
+  return mid_out*_powf(2.0f,out_stop);
+}
+__DEVICE__ float fns_inverse_characteristic(float y,float mid_in,float mid_out,float below,float above,float blend){
+  float inv_scale=mid_in/_fmaxf(mid_out,1.0e-8f);
+  if(y<=0.0f)return y*inv_scale;
+
+  float out_stop=_log2f(_fmaxf(y/_fmaxf(mid_out,1.0e-8f),1.0e-30f));
+
+  if(blend<=1.0e-7f){
+    float p=out_stop<0.0f?_fmaxf(below,1.0e-6f):_fmaxf(above,1.0e-6f);
+    float stop=clampf(out_stop/p,-120.0f,120.0f);
+    return mid_in*_powf(2.0f,stop);
+  }
+
+  float b=_fmaxf(blend,1.0e-6f);
+  float d=above-below;
+  float F0=fns_smooth_integral(0.5f);
+  float neg_edge=below*(-b)+d*(2.0f*b)*(fns_smooth_integral(0.0f)-F0);
+  float pos_edge=below*( b)+d*(2.0f*b)*(fns_smooth_integral(1.0f)-F0);
+
+  float stop;
+  if(out_stop<=neg_edge){
+    stop=-b+(out_stop-neg_edge)/_fmaxf(below,1.0e-6f);
+  }else if(out_stop>=pos_edge){
+    stop=b+(out_stop-pos_edge)/_fmaxf(above,1.0e-6f);
+  }else{
+    float lo=-b,hi=b;
+    for(int i=0;i<24;i++){
+      float m=(lo+hi)*0.5f;
+      float f=fns_log_response(m,below,above,b);
+      if(f<out_stop)lo=m;else hi=m;
+    }
+    stop=(lo+hi)*0.5f;
+  }
+
+  stop=clampf(stop,-120.0f,120.0f);
+  return mid_in*_powf(2.0f,stop);
+}
+__DEVICE__ float3 fns_forward_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend){
+  return make_float3(
+    fns_forward_characteristic(rgb.x,mid_in,mid_out,below,above,blend),
+    fns_forward_characteristic(rgb.y,mid_in,mid_out,below,above,blend),
+    fns_forward_characteristic(rgb.z,mid_in,mid_out,below,above,blend));
+}
+__DEVICE__ float3 fns_apply_printer_lights(float3 rgb,float pr,float pg,float pb){
+  float3 gains=make_float3(fns_printer_gain(pr),fns_printer_gain(pg),fns_printer_gain(pb));
+  return rgb*gains;
+}
+__DEVICE__ float3 fns_inverse_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend){
+  return make_float3(
+    fns_inverse_characteristic(rgb.x,mid_in,mid_out,below,above,blend),
+    fns_inverse_characteristic(rgb.y,mid_in,mid_out,below,above,blend),
+    fns_inverse_characteristic(rgb.z,mid_in,mid_out,below,above,blend));
+}
+
+// Catastrophic-only scene-domain ceiling. Values within +/-1e8 are untouched;
+// beyond that, RGB is uniformly scaled to preserve hue and channel ratios.
+__DEVICE__ float3 technical_scene_ceiling_guard(float3 rgb){
+  float m=_fmaxf(_fabs(rgb.x),_fmaxf(_fabs(rgb.y),_fabs(rgb.z)));
+  if(m<=1.0e8f)return rgb;
+  float k=1.0e8f/m;
+  return rgb*make_float3(k,k,k);
+}
+
+// ---- Scene-luminance Black control ----
+
+__DEVICE__ float3 apply_black_tone_xyz(float3 xyz,float amount){
+  // Symmetric, scene-luminance-driven black shaping.
+  // Positive Black opens/deepens visibility in the toe; negative Black increases density.
+  // The control is exactly continuous at zero and leaves mathematical black at black.
+  // Range +/-0.05 maps to at most +/-1.5 stops in the deepest usable shadows.
+  float a=clampf(amount,-0.05f,0.05f);
+  if(_fabs(a)<=1.0e-9f||xyz.y<=0.0f)return xyz;
+
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-30f)/0.18f);
+  float w=1.0f-smootherstep(-5.5f,-1.0f,ev);
+
+  float u=clampf(a/0.05f,-1.0f,1.0f);
+  float shaped=u>=0.0f?u*u:-u*u;
+  float stops=1.50f*shaped*w;
+  float gain=_powf(2.0f,stops);
+
+  return xyz*make_float3(gain,gain,gain);
+}
+
+// ============================================================================
+// Keystone v1.4 scene-luminance Daniele contrast
+// ============================================================================
+//
+// The Daniele/Siragusano tone shape is evaluated on scene luminance only.
+// 18% gray is normalized to remain 18%, and the resulting Y ratio scales XYZ
+// uniformly. Contrast therefore changes tone without rotating hue/chromaticity.
+//
+// Contrast UI:
+//   0.50 -> internal gamma 0.60
+//   1.00 -> exact identity
+//   1.20 -> internal gamma 1.184
+//   2.00 -> internal gamma 1.60
+//
+// The mapping is C1-continuous at Contrast=1.
+
+#define KS_DANIELE_M 305.997648326739f
+#define KS_DANIELE_EXPOSURE 1.000000000000f
+#define KS_DANIELE_TOE 0.050000000000f
+
+__DEVICE__ float ks_daniele_gamma_from_contrast(float contrast){
+  float c=clampf(contrast,0.5f,2.0f);
+  float d=c-1.0f;
+  return 1.0f+d-0.40f*d*_fabs(d);
+}
+
+__DEVICE__ float ks_daniele_raw(float x,float gamma){
+  float m=KS_DANIELE_M;
+  float s=KS_DANIELE_EXPOSURE*_powf(m,1.0f/gamma);
+  float xx=_fmaxf(0.0f,x);
+  float den=x+s;
+  if(den<=1.0e-12f)return 0.0f;
+  float fx=m*_powf(xx/den,gamma);
+  return _fmaxf(0.0f,fx*fx/(fx+KS_DANIELE_TOE));
+}
+
+__DEVICE__ float ks_daniele_scene_normalized(float scene,float gamma){
+  if(scene<=0.0f)return scene;
+  float gray_raw=ks_daniele_raw(1.0f,gamma);
+  if(gray_raw<=1.0e-12f)return scene;
+  float rel=scene/0.18f;
+  float shaped=ks_daniele_raw(rel,gamma);
+  return 0.18f*(shaped/gray_raw);
+}
+
+__DEVICE__ float ks_daniele_luma(float Y,float contrast){
+  float c=clampf(contrast,0.5f,2.0f);
+  if(_fabs(c-1.0f)<=1.0e-8f||Y<=0.0f)return Y;
+
+  // Preserve numerical precision in the extreme toe. Below roughly -22 EV from
+  // 18% gray, the LogC3 code offset dominates float precision. Fade the creative
+  // curve in smoothly and reach full strength by about -14 EV.
+  float ev=_log2f(_fmaxf(Y,1.0e-30f)/0.18f);
+  float activity=smootherstep(-22.0f,-14.0f,ev);
+  if(activity<=1.0e-8f)return Y;
+
+  float gamma_sel=ks_daniele_gamma_from_contrast(c);
+  float scene_sel=ks_daniele_scene_normalized(Y,gamma_sel);
+  float scene_ref=ks_daniele_scene_normalized(Y,1.0f);
+
+  float code=logc3_encode_ei800_scalar(Y);
+  float code_sel=logc3_encode_ei800_scalar(scene_sel);
+  float code_ref=logc3_encode_ei800_scalar(scene_ref);
+  float full=logc3_decode_ei800_scalar(code+(code_sel-code_ref));
+  if(full<=0.0f||full!=full)return Y;
+
+  return Y+(full-Y)*activity;
+}
+
+__DEVICE__ float3 apply_keystone_daniele_xyz(float3 xyz,float contrast){
+  if(_fabs(contrast-1.0f)<=1.0e-8f||xyz.y<=0.0f)return xyz;
+  float Yout=ks_daniele_luma(xyz.y,contrast);
+  float k=Yout/xyz.y;
+  return xyz*make_float3(k,k,k);
+}
+
+// Shadows/Highlights are selected from scene luminance instead of per-channel code values.
+// This makes the controls behave like broad HDR/log tonal zones: the qualification is
+// color-independent, middle gray stays anchored, and the result cannot create channel hue shifts.
+__DEVICE__ float3 keystone_hybrid_zone_masks(float Y){
+  float ev=Y>1.0e-10f?_log2f(Y/0.18f):-20.0f;
+
+  // Broad, smooth zones with a clean midtone gap around 18% gray. The fifth-order
+  // transitions avoid a visible boundary while keeping the control much more local than
+  // the former whole-half encoded response.
+  float sw=1.0f-smootherstep(-2.60f,-0.10f,ev);
+  float hw=smootherstep(0.10f,2.60f,ev);
+
+  // Do not force chromatic noise/invalid near-black values harder simply because they sit
+  // below the shadow threshold. This only fades the final fraction near scene black.
+  float black_gate=smootherstep(-7.0f,-5.0f,ev);
+  sw*=black_gate;
+
+  return make_float3(clampf(sw,0.0f,1.0f),0.0f,clampf(hw,0.0f,1.0f));
+}
+
+__DEVICE__ float3 apply_keystone_hybrid_zones_xyz(float3 xyz,float shadows_value,float highlights_value){
+  if(_fabs(shadows_value)<=1.0e-7f&&_fabs(highlights_value)<=1.0e-7f)return xyz;
+  float Y=xyz.y;
+  if(Y<=0.0f)return xyz;
+
+  float3 masks=keystone_hybrid_zone_masks(Y);
+  float stops=shadows_value*masks.x+highlights_value*masks.z;
+  float gain=_powf(2.0f,stops);
+  return xyz*make_float3(gain,gain,gain);
+}
+__DEVICE__ float scene_ev_from_y(float Y,float mid){if(Y<=1.0e-10f)return -20.0f;return _log2f(Y/_fmaxf(mid,1.0e-8f));}
+__DEVICE__ float3 apply_auto_rolloff_xyz(float3 xyz,float mid,float amount){
+  // Monotonic scene-luminance shoulder with a true identity limit at amount=0.
+  // The old 0.50+ offset made the first slider increment far too strong.
+  float a=clampf(amount,0.0f,2.0f);
+  if(a<=1.0e-9f||xyz.y<=1.0e-10f)return xyz;
+
+  float ev=scene_ev_from_y(xyz.y,mid);
+  const float knee_ev=2.50f;
+  if(ev<=knee_ev)return xyz;
+
+  float d=ev-knee_ev;
+  float strength=3.0f*a; // exactly approaches zero with the slider
+  if(strength<=1.0e-8f)return xyz;
+
+  // ln(1+s*d)/s, expressed with log2 for conservative DCTL compatibility.
+  float out_d=_log2f(1.0f+strength*d)*LN2/strength;
+  float out_ev=knee_ev+out_d;
+  float Yout=mid*_powf(2.0f,out_ev);
+  float k=Yout/xyz.y;
+  return xyz*make_float3(k,k,k);
+}
+
+// ---- Oklab hue-preserving density saturation ----
+// Saturation is built in a scale-homogeneous opponent space rather than RGB/Y ratios.
+// This removes the wide-gamut blue/cyan explosions and negative-channel discontinuity
+// found in v1.3.
+//
+// Behavior:
+//   Sat 0 -> neutral at the same scene Y
+//   Sat 1 -> exact identity
+//   Sat >1 -> bounded Oklab chroma expansion with diminishing returns
+//             plus a small density term tied only to actual chroma increase.
+//
+// Hue is preserved because only Oklab a/b magnitude changes. Density is applied as
+// a final uniform XYZ scale through exact-Y reconstruction.
+
+__DEVICE__ float native_gamut_margin_awg3(float3 rgb){
+  float maxabs=_fmaxf(_fabs(rgb.x),_fmaxf(_fabs(rgb.y),_fabs(rgb.z)));
+  if(maxabs<=1.0e-12f)return 1.0f;
+  float minc=_fminf(rgb.x,_fminf(rgb.y,rgb.z));
+  return clampf(minc/maxabs,-1.0f,1.0f);
+}
+
+__DEVICE__ float ks_sat_positive_scale(float relC,float amount){
+  float u=clampf(amount-1.0f,0.0f,1.0f);
+  if(u<=1.0e-8f||relC<=1.0e-10f)return 1.0f;
+
+  // Weak/moderate colors can gain more than already-saturated colors.
+  float proposed=1.0f+(0.65f*u)/(1.0f+2.50f*relC);
+  float target_rel=relC*proposed;
+
+  // Hard production bounds: at Sat 2, relative chroma can grow by at most .10,
+  // and colors already beyond relC .82 are never pushed farther outward.
+  float delta_limit=relC+0.10f*u;
+  float absolute_limit=_fmaxf(relC,0.82f);
+  target_rel=_fminf(target_rel,_fminf(delta_limit,absolute_limit));
+  return _fmaxf(1.0f,target_rel/relC);
+}
+
+__DEVICE__ float3 ks_sat_xyz_at_scale(float3 lab,float targetY,float chroma_scale){
+  float3 t=make_float3(lab.x,lab.y*chroma_scale,lab.z*chroma_scale);
+  return oklab_to_xyz_preserve_y_safe(t,targetY);
+}
+
+__DEVICE__ float ks_sat_safe_scale(float3 xyz,float3 lab,float proposed_scale){
+  if(proposed_scale<=1.0f)return proposed_scale;
+
+  float3 original_rgb=xyz_to_awg3(xyz);
+  float current_margin=native_gamut_margin_awg3(original_rgb);
+  float required_margin=current_margin<0.005f?current_margin:0.005f;
+
+  float3 candidate_xyz=ks_sat_xyz_at_scale(lab,xyz.y,proposed_scale);
+  float3 candidate_rgb=xyz_to_awg3(candidate_xyz);
+  if(native_gamut_margin_awg3(candidate_rgb)>=required_margin)return proposed_scale;
+
+  float lo=1.0f,hi=proposed_scale;
+  for(int i=0;i<20;i++){
+    float mid=(lo+hi)*0.5f;
+    float3 test_xyz=ks_sat_xyz_at_scale(lab,xyz.y,mid);
+    float3 test_rgb=xyz_to_awg3(test_xyz);
+    if(native_gamut_margin_awg3(test_rgb)>=required_margin)lo=mid;else hi=mid;
+  }
+  return lo;
+}
+
+__DEVICE__ float3 apply_density_saturation_xyz(float3 xyz,float amount){
+  float s=clampf(amount,0.0f,2.0f);
+  if(_fabs(s-1.0f)<=1.0e-8f||xyz.y<=1.0e-20f)return xyz;
+
+  float3 lab=xyz_to_oklab(xyz);
+  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
+  float Labs=_fmaxf(_fabs(lab.x),1.0e-6f);
+
+  if(C<=1.0e-20f)return xyz;
+
+  float chroma_scale;
+  if(s<=1.0f){
+    chroma_scale=s;
+  }else{
+    float relC=C/Labs;
+    float proposed=ks_sat_positive_scale(relC,s);
+    chroma_scale=ks_sat_safe_scale(xyz,lab,proposed);
+  }
+
+  float targetY=xyz.y;
+  if(s>1.0f&&chroma_scale>1.0f){
+    float relC=C/Labs;
+    float chroma_activity=smootherstep(0.05f,0.35f,relC);
+    // Density follows the chroma actually achieved after gamut limiting, so the
+    // slider never keeps darkening a color after its safe chroma increase plateaus.
+    float density_reduction=_fminf(0.08f,0.20f*(chroma_scale-1.0f))*chroma_activity;
+    targetY*=1.0f-density_reduction;
+  }
+
+  return ks_sat_xyz_at_scale(lab,targetY,chroma_scale);
+}
+
+
+// ---- Masked skin shaping controls ----
+// Inspired by Primera-style selective skin controls, but integrated into Keystone's
+// corrected Oklab/scene-referred architecture.
+//
+// Controls:
+//   Skin / Range       : broadness of the qualification
+//   Skin / Hue         : rotates qualified skin around a fixed skin target axis
+//   Skin / Sat  : scales qualified skin chroma
+//   Skin / Dense     : adjusts qualified skin scene Y (positive = denser/darker)
+//   Skin / Even    : compresses hue scatter toward the skin target axis
+//   Skin / Sep  : tightens the mask around the most confident skin colors
+//
+// This is still only a color-based qualifier. It is not face recognition.
+//
+// Placement:
+//   after global Saturation
+//   before Split Tone
+// so you can refine skin first and still apply a final creative split-tone on top.
+
+#define KS_SKIN_TARGET_RAD 0.942477796077f  // ~54 degrees in Oklab a/b
+#define KS_SKIN_HUE_SHIFT_RAD 0.349065850399f // 20 degrees max
+#define KS_SKIN_SAT_SCALE_MAX 0.50f
+#define KS_SKIN_DENSITY_MAX 0.15f
+
+__DEVICE__ float ks_wrap_skin_angle(float x){
+  if(x>3.141592653590f)x-=6.283185307180f;
+  if(x<-3.141592653590f)x+=6.283185307180f;
+  return x;
+}
+
+__DEVICE__ float3 ks_skin_candidate_lab_from_mix(float3 lab0,float3 lab1,float Y0,float Y1,float t){
+  float3 lab=make_float3(
+    lab0.x+(lab1.x-lab0.x)*t,
+    lab0.y+(lab1.y-lab0.y)*t,
+    lab0.z+(lab1.z-lab0.z)*t);
+  float Y=Y0+(Y1-Y0)*t;
+  return oklab_to_xyz_preserve_y_safe(lab,Y);
+}
+
+__DEVICE__ float skin_confidence_xyz(float3 xyz,float range_ctrl){
+  if(xyz.y<=1.0e-20f)return 0.0f;
+
+  float3 rgb=xyz_to_awg3(xyz);
+  float r=_fmaxf(rgb.x,0.0f);
+  float g=_fmaxf(rgb.y,0.0f);
+  float b=_fmaxf(rgb.z,0.0f);
+  float sum=r+g+b;
+  if(sum<=1.0e-8f)return 0.0f;
+
+  float rn=r/sum;
+  float gn=g/sum;
+  float bn=b/sum;
+
+  // Brightness-invariant rg-style gates.
+  float g_gate=
+    smootherstep(0.20f,0.26f,gn)*
+    (1.0f-smootherstep(0.37f,0.44f,gn));
+
+  float rb=rn-bn;
+  float rb_gate=
+    smootherstep(0.02f,0.075f,rb)*
+    (1.0f-smootherstep(0.34f,0.42f,rb));
+
+  float rlead_gate=smootherstep(0.0f,0.03f,rn-gn);
+
+  float3 lab=xyz_to_oklab(xyz);
+  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
+  float Labs=_fmaxf(_fabs(lab.x),1.0e-6f);
+  float relC=C/Labs;
+
+  // Reject both near-neutrals and extreme colors.
+  float chroma_gate=
+    smootherstep(0.03f,0.07f,relC)*
+    (1.0f-smootherstep(0.34f,0.60f,relC));
+
+  // Keep plausible exposure region for skin.
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
+  float luma_gate=
+    smootherstep(-5.0f,-2.0f,ev)*
+    (1.0f-smootherstep(3.0f,5.5f,ev));
+
+  float range=clampf(range_ctrl,0.25f,2.0f);
+  float hue=_atan2f(lab.z,lab.y);
+  float dev=_fabs(ks_wrap_skin_angle(hue-KS_SKIN_TARGET_RAD));
+  float core=(10.0f+12.0f*range)*0.0174532925199433f;
+  float outer=(20.0f+18.0f*range)*0.0174532925199433f;
+  float hue_gate=1.0f-smootherstep(core,outer,dev);
+
+  return clampf(g_gate*rb_gate*rlead_gate*chroma_gate*luma_gate*hue_gate,0.0f,1.0f);
+}
+
+__DEVICE__ float3 apply_skin_controls_xyz(float3 xyz,float range_ctrl,float hue_ctrl,float sat_ctrl,float density_ctrl,float evenness_ctrl,float separation_ctrl){
+  float range=clampf(range_ctrl,0.25f,2.0f);
+  float huec=clampf(hue_ctrl,-1.0f,1.0f);
+  float satc=clampf(sat_ctrl,-1.0f,1.0f);
+  float densc=clampf(density_ctrl,-1.0f,1.0f);
+  float evenc=clampf(evenness_ctrl,0.0f,1.0f);
+  float sepc=clampf(separation_ctrl,0.0f,1.0f);
+
+  if(_fabs(huec)<=1.0e-8f&&_fabs(satc)<=1.0e-8f&&_fabs(densc)<=1.0e-8f&&evenc<=1.0e-8f&&sepc<=1.0e-8f)return xyz;
+  if(xyz.y<=1.0e-20f)return xyz;
+
+  float mask=skin_confidence_xyz(xyz,range);
+  if(mask<=1.0e-7f)return xyz;
+
+  // Separation makes the qualifier focus more on the confident core of the mask.
+  float focus=_powf(mask,1.0f+4.0f*sepc);
+  float m=clampf(focus,0.0f,1.0f);
+  if(m<=1.0e-7f)return xyz;
+
+  float3 lab=xyz_to_oklab(xyz);
+  float a=lab.y,b=lab.z;
+  float C=_sqrtf(a*a+b*b);
+  if(C<=1.0e-20f)return xyz;
+
+  float3 u=make_float3(_cosf(KS_SKIN_TARGET_RAD),_sinf(KS_SKIN_TARGET_RAD),0.0f);
+  float3 v=make_float3(-u.y,u.x,0.0f);
+
+  float p=a*u.x+b*u.y;
+  float q=a*v.x+b*v.y;
+
+  // Evenness compresses off-axis hue error while leaving the principal skin axis.
+  q*=1.0f-0.85f*evenc*m;
+
+  float a1=p*u.x+q*v.x;
+  float b1=p*u.y+q*v.y;
+
+  // User hue shift after evenness compression.
+  float shift=huec*KS_SKIN_HUE_SHIFT_RAD*m;
+  float cs=_cosf(shift), sn=_sinf(shift);
+  float a2=a1*cs-b1*sn;
+  float b2=a1*sn+b1*cs;
+
+  float sat_scale=1.0f+KS_SKIN_SAT_SCALE_MAX*satc*m;
+  sat_scale=_fmaxf(0.0f,sat_scale);
+  a2*=sat_scale;
+  b2*=sat_scale;
+
+  float targetY=xyz.y;
+  float relC=C/_fmaxf(_fabs(lab.x),1.0e-6f);
+  float activity=smootherstep(0.04f,0.25f,relC);
+  targetY*=1.0f-KS_SKIN_DENSITY_MAX*densc*m*activity;
+
+  float3 target_lab=make_float3(lab.x,a2,b2);
+  float3 candidate_xyz=oklab_to_xyz_preserve_y_safe(target_lab,targetY);
+
+  // Gamut-safe interpolation from original toward candidate.
+  float3 original_rgb=xyz_to_awg3(xyz);
+  float current_margin=native_gamut_margin_awg3(original_rgb);
+  float required_margin=current_margin<0.005f?current_margin:0.005f;
+
+  float3 candidate_rgb=xyz_to_awg3(candidate_xyz);
+  if(native_gamut_margin_awg3(candidate_rgb)>=required_margin)return candidate_xyz;
+
+  float lo=0.0f,hi=1.0f;
+  for(int i=0;i<20;i++){
+    float mid=(lo+hi)*0.5f;
+    float3 test_xyz=ks_skin_candidate_lab_from_mix(lab,target_lab,xyz.y,targetY,mid);
+    float3 test_rgb=xyz_to_awg3(test_xyz);
+    if(native_gamut_margin_awg3(test_rgb)>=required_margin)lo=mid;else hi=mid;
+  }
+  return ks_skin_candidate_lab_from_mix(lab,target_lab,xyz.y,targetY,lo);
+}
+
+// ---- Split-tone shadow/highlight color divergence ----
+// Adds a bounded Oklab chroma vector toward independent shadow and highlight hues.
+// Reuses the same scene-luminance shadow/highlight zone weights as the Shadows/
+// Highlights tone controls (keystone_hybrid_zone_masks), so "shadow" and "highlight"
+// mean the same tonal range throughout Keystone.
+//
+// This is additive in Oklab a/b (a chroma injection), not multiplicative like
+// Saturation, and is fully orthogonal to it by construction: Saturation scales
+// existing chroma; split-tone adds a directional chroma vector on top. Scene Y is
+// held exactly via the same preserve-Y Oklab reconstruction used by Saturation and
+// White/Black Clean. Runs after Saturation and before White/Black Clean, so those
+// two can still be used to trim true neutrals back out of a strong tilt.
+//
+// Hue is plain Oklab a/b angle in degrees: ~0=pink-red, ~90=yellow, ~200=cyan/teal,
+// ~270=blue. Amount 0 on both is an exact bypass.
+#define KS_SPLIT_MAX_CHROMA 0.10f
+#define KS_SPLIT_DEG_TO_RAD 0.0174532925199433f
+
+__DEVICE__ float3 ks_split_inject_ab(float Y,float shadow_hue,float shadow_amount,float highlight_hue,float highlight_amount){
+  float3 masks=keystone_hybrid_zone_masks(Y);
+  float sw=masks.x*shadow_amount;
+  float hw=masks.z*highlight_amount;
+  if(sw<=1.0e-7f&&hw<=1.0e-7f)return make_float3(0.0f,0.0f,0.0f);
+
+  float srad=shadow_hue*KS_SPLIT_DEG_TO_RAD;
+  float hrad=highlight_hue*KS_SPLIT_DEG_TO_RAD;
+  float da=sw*_cosf(srad)+hw*_cosf(hrad);
+  float db=sw*_sinf(srad)+hw*_sinf(hrad);
+  return make_float3(da*KS_SPLIT_MAX_CHROMA,db*KS_SPLIT_MAX_CHROMA,0.0f);
+}
+
+__DEVICE__ float3 apply_split_tone_xyz(float3 xyz,float shadow_hue,float shadow_amount,float highlight_hue,float highlight_amount){
+  if(shadow_amount<=1.0e-7f&&highlight_amount<=1.0e-7f)return xyz;
+  if(xyz.y<=1.0e-20f)return xyz;
+
+  float3 inject=ks_split_inject_ab(xyz.y,shadow_hue,shadow_amount,highlight_hue,highlight_amount);
+  if(_fabs(inject.x)<=1.0e-9f&&_fabs(inject.y)<=1.0e-9f)return xyz;
+
+  float3 lab=xyz_to_oklab(xyz);
+
+  // Gamut-safe: if the pixel is already near the AWG3 boundary, scale the injected
+  // vector back (not the pixel's pre-existing chroma) so tinting fades near the
+  // edge of gamut instead of clipping or pulling saturated color back to neutral.
+  float3 original_rgb=xyz_to_awg3(xyz);
+  float current_margin=native_gamut_margin_awg3(original_rgb);
+  float required_margin=current_margin<0.005f?current_margin:0.005f;
+
+  float3 candidate_lab=make_float3(lab.x,lab.y+inject.x,lab.z+inject.y);
+  float3 candidate_xyz=oklab_to_xyz_preserve_y_safe(candidate_lab,xyz.y);
+  float3 candidate_rgb=xyz_to_awg3(candidate_xyz);
+  if(native_gamut_margin_awg3(candidate_rgb)>=required_margin)return candidate_xyz;
+
+  float lo=0.0f,hi=1.0f;
+  for(int i=0;i<20;i++){
+    float mid=(lo+hi)*0.5f;
+    float3 test_lab=make_float3(lab.x,lab.y+inject.x*mid,lab.z+inject.y*mid);
+    float3 test_xyz=oklab_to_xyz_preserve_y_safe(test_lab,xyz.y);
+    float3 test_rgb=xyz_to_awg3(test_xyz);
+    if(native_gamut_margin_awg3(test_rgb)>=required_margin)lo=mid;else hi=mid;
+  }
+  float3 final_lab=make_float3(lab.x,lab.y+inject.x*lo,lab.z+inject.y*lo);
+  return oklab_to_xyz_preserve_y_safe(final_lab,xyz.y);
+}
+
+// White cleanup is intentionally NOT a look transform. It only reduces chroma
+// in bright, already-near-neutral colors while preserving scene Y. This is a
+// luminance-preserving white-clean operation: no palette matrix, hue rotation,
+// Technicolor crosstalk, or global saturation change is present. Saturated
+// highlights are protected by the relative-chroma gate.
+__DEVICE__ float3 clean_neutral_highlights_xyz(float3 xyz,float amount){
+  float a=clampf(amount,0.0f,1.0f);
+  if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
+
+  float3 lab=xyz_to_oklab(xyz);
+  float L=lab.x;
+  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
+  if(C<=1.0e-20f)return xyz;
+
+  // Stronger real-world white selector. Begin engaging slightly below middle-gray
+  // and reach full tonal eligibility by +1 EV. This lets practical white objects
+  // become fully neutral instead of being limited by a half-strength brightness mask.
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
+  float white_gate=smootherstep(-0.50f,1.00f,ev);
+
+  // Full cleanup is allowed for mildly contaminated near-whites through relC .08.
+  // More colorful highlights roll off smoothly, with strong color protected by .30.
+  float relC=C/_fmaxf(_fabs(L),1.0e-6f);
+  float neutral_gate=1.0f-smootherstep(0.080f,0.300f,relC);
+
+  // Smoothstep slider response with exact 0, 0.5, and 1 reference points.
+  float a_eff=a*a*(3.0f-2.0f*a);
+  float clean=clampf(a_eff*white_gate*neutral_gate,0.0f,1.0f);
+  if(clean<=1.0e-7f)return xyz;
+  lab.y*=1.0f-clean;
+  lab.z*=1.0f-clean;
+  return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
+}
+
+// Black cleanup mirrors the white-clean idea at the opposite end of the scene
+// range. It only reduces chroma in deep, already-near-neutral shadows while
+// preserving scene Y. The L floor in the chroma ratio is intentional: without it,
+// tiny RGB contamination near black can look artificially "high saturation" and
+// prevent the selector from engaging.
+__DEVICE__ float3 clean_neutral_shadows_xyz(float3 xyz,float amount){
+  float a=clampf(amount,0.0f,1.0f);
+  if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
+
+  float3 lab=xyz_to_oklab(xyz);
+  float L=lab.x;
+  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
+  if(C<=1.0e-20f)return xyz;
+
+  // Stronger black selector. Deep shadows are fully eligible by -2 EV and the
+  // effect fades smoothly out through middle gray instead of stopping at -1 EV.
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
+  float black_gate=1.0f-smootherstep(-2.0f,0.0f,ev);
+
+  // Full cleanup is allowed for mildly contaminated near-blacks through relC .06.
+  // More colorful shadows are increasingly protected, reaching full protection by .30.
+  float relC=C/_fmaxf(_fabs(L),0.12f);
+  float neutral_gate=1.0f-smootherstep(0.060f,0.300f,relC);
+
+  float a_eff=a*a*(3.0f-2.0f*a);
+  float clean=clampf(a_eff*black_gate*neutral_gate,0.0f,1.0f);
+  if(clean<=1.0e-7f)return xyz;
+  lab.y*=1.0f-clean;
+  lab.z*=1.0f-clean;
+  return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
+}
+
+// ---- Technical encode-domain guard ----
+// This is NOT creative gamut mapping. It only prevents pathological imaginary RGB
+// ratios produced by extreme combinations from exploding vendor log encoders.
+// Normal extended/negative values are preserved. For positive scene Y, channel
+// excursions are bounded only when they become catastrophic for downstream encoders; ordinary negative values remain extended.
+// Final transfer-aware safety gate. A scene-linear value that looks merely extended can
+// encode to a catastrophic negative number in some log curves. For positive scene Y,
+// reduce only chroma (toward the equal-RGB neutral at the same Y) when final encoded RGB
+// would fall below -1.0. Ordinary extended negatives remain untouched.
+__DEVICE__ float3 technical_encoded_negative_guard(float3 rgb,float Y){
+  const float code_floor=-1.0f;
+  float3 enc=logc3_encode_ei800(rgb);
+  float mn=_fminf(enc.x,_fminf(enc.y,enc.z));
+  if(mn>=code_floor)return rgb;
+
+  if(Y>0.0f){
+    float3 neutral=make_float3(Y,Y,Y);
+    float3 delta=rgb-neutral;
+    float3 neutral_enc=logc3_encode_ei800(neutral);
+    float neutral_min=_fminf(neutral_enc.x,_fminf(neutral_enc.y,neutral_enc.z));
+    if(neutral_min>=code_floor){
+      float lo=0.0f,hi=1.0f;
+      for(int i=0;i<16;i++){
+        float mid=(lo+hi)*0.5f;
+        float3 candidate=neutral+delta*make_float3(mid,mid,mid);
+        float3 candidate_enc=logc3_encode_ei800(candidate);
+        float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
+        if(candidate_min>=code_floor)lo=mid;else hi=mid;
+      }
+      return neutral+delta*make_float3(lo,lo,lo);
+    }
+  }
+
+  float lo=0.0f,hi=1.0f;
+  for(int i=0;i<16;i++){
+    float mid=(lo+hi)*0.5f;
+    float3 candidate=rgb*make_float3(mid,mid,mid);
+    float3 candidate_enc=logc3_encode_ei800(candidate);
+    float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
+    if(candidate_min>=code_floor)lo=mid;else hi=mid;
+  }
+  return rgb*make_float3(lo,lo,lo);
+}
+
+// ---- Input Gamut Heal: ACES 1.3 RGC core in AP1 wrapper ----
+// Optional technical input repair only; AP1 is a local reference-operator domain, not Keystone's working space.
+__DEVICE__ float rgc_comp_dist(float dn,float t,float ss){if(dn<t)return dn;float x=(dn-t)/ss;float dp=_powf(_fmaxf(x,0.0f),1.2f);return t+(dn-t)/_powf(1.0f+dp,1.0f/1.2f);}
+__DEVICE__ float3 rgc_core_ap1(float3 rgb){float A=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z));float aa=_fabs(A);if(aa<=1e-20f)return rgb;float dnR=(A-rgb.x)/aa,dnG=(A-rgb.y)/aa,dnB=(A-rgb.z)/aa;float dcR=rgc_comp_dist(dnR,0.815f,0.327301877468f);float dcG=rgc_comp_dist(dnG,0.803f,0.285938028927f);float dcB=rgc_comp_dist(dnB,0.880f,0.146821457838f);return make_float3(A-dcR*aa,A-dcG*aa,A-dcB*aa);}
+__DEVICE__ float3 input_gamut_heal_xyz(float3 xyz){float3 ap1=mmul(X65_TO_AP1_C0,X65_TO_AP1_C1,X65_TO_AP1_C2,xyz);ap1=rgc_core_ap1(ap1);return mmul(AP1_TO_X65_C0,AP1_TO_X65_C1,AP1_TO_X65_C2,ap1);}
+
+__DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,float p_G,float p_B){
+  float c_wb_hue=clampf(wb_hue,0.0f,360.0f);
+  float c_wb_amount=clampf(wb_amount,0.0f,1.0f);
+  float c_fns_pr=clampf(fns_printer_r,0.0f,50.0f);
+  float c_fns_pg=clampf(fns_printer_g,0.0f,50.0f);
+  float c_fns_pb=clampf(fns_printer_b,0.0f,50.0f);
+  float c_p_exposure=clampf(p_exposure,-6.0f,6.0f);
+  float c_p_bp=clampf(p_bp,-0.05f,0.05f);
+  float c_p_contrast=clampf(p_contrast,0.5f,2.0f);
+  float c_p_shadows=clampf(p_shadows,-1.0f,1.0f);
+  float c_p_highlights=clampf(p_highlights,-1.0f,1.0f);
+  float c_p_high_soft=clampf(p_high_soft,0.0f,2.0f);
+  float c_saturation=clampf(saturation,0.0f,2.0f);
+  float c_skin_range=clampf(skin_range,0.25f,2.0f);
+  float c_skin_hue=clampf(skin_hue,-1.0f,1.0f);
+  float c_skin_sat=clampf(skin_sat,-1.0f,1.0f);
+  float c_skin_density=clampf(skin_density,-1.0f,1.0f);
+  float c_skin_evenness=clampf(skin_evenness,0.0f,1.0f);
+  float c_skin_separation=clampf(skin_separation,0.0f,1.0f);
+  float c_split_sh_hue=clampf(split_shadow_hue,0.0f,360.0f);
+  float c_split_sh_amt=clampf(split_shadow_amount,0.0f,1.0f);
+  float c_split_hl_hue=clampf(split_highlight_hue,0.0f,360.0f);
+  float c_split_hl_amt=clampf(split_highlight_amount,0.0f,1.0f);
+  float c_whiteclean=clampf(white_gamut_clean,0.0f,1.0f);
+  float c_blackclean=clampf(black_gamut_clean,0.0f,1.0f);
+  int raw_heal=(int)(input_gamut_heal+0.5f);
+  int c_heal=raw_heal==heal_aces_rgc?1:0;
+
+  float3 input=make_float3(p_R,p_G,p_B);
+
+  bool base_neutral=
+    c_heal==0&&
+    c_wb_amount<=1e-7f&&
+    _fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&
+    _fabs(c_p_contrast-1.0f)<=1e-7f&&
+    _fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&
+    c_p_high_soft<=1e-7f&&_fabs(c_saturation-1.0f)<=1e-7f&&
+    _fabs(c_skin_range-1.0f)<=1e-7f&&_fabs(c_skin_hue)<=1e-7f&&_fabs(c_skin_sat)<=1e-7f&&
+    _fabs(c_skin_density)<=1e-7f&&c_skin_evenness<=1e-7f&&c_skin_separation<=1e-7f&&
+    c_split_sh_amt<=1e-7f&&c_split_hl_amt<=1e-7f&&
+    _fabs(c_fns_pr-25.0f)<=1e-7f&&_fabs(c_fns_pg-25.0f)<=1e-7f&&_fabs(c_fns_pb-25.0f)<=1e-7f&&
+    c_whiteclean<=1e-7f&&c_blackclean<=1e-7f;
+  if(base_neutral)return input;
+
+  float3 lin=logc3_decode_ei800(input);
+
+  if(c_heal==1){
+    float3 repair_xyz=awg3_to_xyz(lin);
+    repair_xyz=input_gamut_heal_xyz(repair_xyz);
+    lin=xyz_to_awg3(repair_xyz);
+  }
+
+  float3 xyz=awg3_to_xyz(lin);
+
+  if(c_wb_amount>1.0e-7f)
+    xyz=apply_bradford_wb_xyz(xyz,c_wb_hue,c_wb_amount);
+
+  // True scene-linear global exposure.
+  if(_fabs(c_p_exposure)>1.0e-7f){
+    float k=_powf(2.0f,c_p_exposure);
+    xyz*=make_float3(k,k,k);
+  }
+
+  // Film Negative Space is used only for printer-light density balance.
+  bool printer_active=
+    _fabs(c_fns_pr-25.0f)>1e-7f||
+    _fabs(c_fns_pg-25.0f)>1e-7f||
+    _fabs(c_fns_pb-25.0f)>1e-7f;
+  if(printer_active){
+    float3 neg=xyz_to_awg3(xyz);
+    neg=fns_forward_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
+    neg=fns_apply_printer_lights(neg,c_fns_pr,c_fns_pg,c_fns_pb);
+    neg=fns_inverse_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
+    neg=technical_scene_ceiling_guard(neg);
+    xyz=awg3_to_xyz(neg);
+  }
+
+  if(_fabs(c_p_bp)>1.0e-9f)
+    xyz=apply_black_tone_xyz(xyz,c_p_bp);
+
+  // Daniele operates on scene luminance and scales XYZ uniformly.
+  xyz=apply_keystone_daniele_xyz(xyz,c_p_contrast);
+
+  xyz=apply_keystone_hybrid_zones_xyz(xyz,c_p_shadows,c_p_highlights);
+
+  if(c_p_high_soft>1.0e-7f)
+    xyz=apply_auto_rolloff_xyz(xyz,0.18f,c_p_high_soft);
+
+  if(_fabs(c_saturation-1.0f)>1.0e-7f)
+    xyz=apply_density_saturation_xyz(xyz,c_saturation);
+
+  if(_fabs(c_skin_hue)>1.0e-7f||_fabs(c_skin_sat)>1.0e-7f||_fabs(c_skin_density)>1.0e-7f||c_skin_evenness>1.0e-7f||c_skin_separation>1.0e-7f)
+    xyz=apply_skin_controls_xyz(xyz,c_skin_range,c_skin_hue,c_skin_sat,c_skin_density,c_skin_evenness,c_skin_separation);
+
+  if(c_split_sh_amt>1.0e-7f||c_split_hl_amt>1.0e-7f)
+    xyz=apply_split_tone_xyz(xyz,c_split_sh_hue,c_split_sh_amt,c_split_hl_hue,c_split_hl_amt);
+
+  if(c_whiteclean>1e-7f)
+    xyz=clean_neutral_highlights_xyz(xyz,c_whiteclean);
+  if(c_blackclean>1e-7f)
+    xyz=clean_neutral_shadows_xyz(xyz,c_blackclean);
+
+  float3 cam=xyz_to_awg3(xyz);
+
+  // Catastrophic-only guards. Recompute current scene Y after every operation that
+  // can rescale RGB so later guards never use stale luminance.
+  cam=technical_scene_ceiling_guard(cam);
+  float3 current_xyz=awg3_to_xyz(cam);
+  float currentY=current_xyz.y;
+
+  cam=technical_encoded_negative_guard(cam,currentY);
+  float3 result=logc3_encode_ei800(cam);
+
+  // Coherent failure fallback: never zero one channel independently.
+  if(finitef(result.x)&&finitef(result.y)&&finitef(result.z))return result;
+  if(finitef(input.x)&&finitef(input.y)&&finitef(input.z))return input;
+  return make_float3(0.0f,0.0f,0.0f);
+}

@@ -1,0 +1,121 @@
+name: Release Keystone
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Keystone.dctl"
+      - "VERSION"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "LICENSE"
+      - "tools/validate.py"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate DCTL
+        run: python3 tools/validate.py Keystone.dctl
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ -z "$VERSION" ]]; then
+            echo "VERSION file is empty"
+            exit 1
+          fi
+
+          HEADER_VERSION="$(sed -n 's#^// Keystone v\([0-9][0-9.]*\).*#\1#p' Keystone.dctl | head -n 1)"
+
+          if [[ -z "$HEADER_VERSION" ]]; then
+            echo "Could not read version from Keystone.dctl header"
+            exit 1
+          fi
+
+          if [[ "$VERSION" != "$HEADER_VERSION" ]]; then
+            echo "VERSION ($VERSION) does not match Keystone.dctl header ($HEADER_VERSION)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists; nothing to publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release package
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p "dist/Keystone-v${VERSION}/.github/workflows"
+          mkdir -p "dist/Keystone-v${VERSION}/tools"
+
+          cp Keystone.dctl "dist/Keystone-v${VERSION}/"
+          cp README.md "dist/Keystone-v${VERSION}/"
+          cp CHANGELOG.md "dist/Keystone-v${VERSION}/"
+          cp LICENSE "dist/Keystone-v${VERSION}/"
+          cp THIRD_PARTY_NOTICES.md "dist/Keystone-v${VERSION}/"
+          cp VERSION "dist/Keystone-v${VERSION}/"
+          cp tools/validate.py "dist/Keystone-v${VERSION}/tools/"
+          cp .github/FUNDING.yml "dist/Keystone-v${VERSION}/.github/"
+          cp .github/workflows/validate.yml "dist/Keystone-v${VERSION}/.github/workflows/"
+          cp .github/workflows/release.yml "dist/Keystone-v${VERSION}/.github/workflows/"
+
+          cd dist
+          zip -r "Keystone-v${VERSION}.zip" "Keystone-v${VERSION}"
+          cd ..
+
+          cp "dist/Keystone-v${VERSION}.zip" "Keystone-v${VERSION}.zip"
+          cp Keystone.dctl "Keystone-v${VERSION}.dctl"
+
+      - name: Create GitHub release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          gh release create "$TAG" \
+            "Keystone-v${VERSION}.dctl" \
+            "Keystone-v${VERSION}.zip" \
+            --title "Keystone v${VERSION}" \
+            --generate-notes \
+            --latest

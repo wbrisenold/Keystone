@@ -1,0 +1,33 @@
+name: Validate DCTL
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate Keystone
+        run: python3 tools/validate.py Keystone.dctl
+
+      - name: Package DCTL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Keystone-DCTL
+          path: |
+            Keystone.dctl
+            README.md
+            LICENSE
+            THIRD_PARTY_NOTICES.md
+            CHANGELOG.md

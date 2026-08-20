@@ -1,0 +1,64 @@
+{
+  "name": "Keystone",
+  "version": "1.9.4",
+  "validation": "Keystone DCTL validation: PASS\n UI controls: 25\n NOTE: static validation does not replace compiling the DCTL in DaVinci Resolve.\nSpreadsheet runtime warmup failed during python startup\nTraceback (most recent call last):\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/patches/warm_spreadsheet_runtime_on_startup.py\", line 26, in warm_spreadsheet_runtime_on_startup\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/spreadsheet_warmup.py\", line 772, in warm_spreadsheet_runtime\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/connection.py\", line 37, in get_or_create_client\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/daemon.py\", line 124, in start_daemon\nTimeoutError: Timed out waiting for artifact tool daemon socket. Set ARTIFACT_TOOL_RPC_DAEMON_STARTUP_TIMEOUT_S=<seconds> to increase the limit.",
+  "release_automation": {
+    "dctl_validation_pass": true,
+    "release_workflow_present": true,
+    "contents_write_permission": true,
+    "auto_on_main": true,
+    "manual_dispatch": true,
+    "creates_tag": true,
+    "creates_release": true,
+    "attaches_dctl": true,
+    "attaches_zip": true,
+    "funding_in_release_package": true,
+    "version_file": "1.9.4"
+  },
+  "files": {
+    ".github/FUNDING.yml": {
+      "sha256": "a600f1b9ea0011184fe7af720b56ceed6bc64856127fa83a1b11e971d72fc02e",
+      "bytes": 21
+    },
+    ".github/workflows/release.yml": {
+      "sha256": "bcfbfee1aa9bc721be5e281d00340723ec0985efc3bf6621a5b05ab63bc69bd4",
+      "bytes": 3678
+    },
+    ".github/workflows/validate.yml": {
+      "sha256": "bb8ffab1e3fca19eca87061596b34b1b3eeb15696ac12a04a3045d9107e275e0",
+      "bytes": 652
+    },
+    ".gitignore": {
+      "sha256": "71427f9fe988ecbfcc61a6f9a4f10d0b0af0b83416bc47beba20cda3e8a7a3fc",
+      "bytes": 37
+    },
+    "CHANGELOG.md": {
+      "sha256": "1fa3aa05eebc996255faacf8410957ce31463bab5b061ca591320db80d187315",
+      "bytes": 1249
+    },
+    "Keystone.dctl": {
+      "sha256": "a8d86db76cd5295f4f05a528db2845ed25eba8efa379a8b7c1bb0e2af2ceb8f2",
+      "bytes": 45396
+    },
+    "LICENSE": {
+      "sha256": "5a8a7e9b03614b6b5354764f1579a0d2949007f0877473bd5dc9ed39341e1b88",
+      "bytes": 1078
+    },
+    "README.md": {
+      "sha256": "352049926b9004af972ee41c292c06dcfbd992cb682480fa14acfce06fa030a6",
+      "bytes": 4199
+    },
+    "THIRD_PARTY_NOTICES.md": {
+      "sha256": "3000d80a9c251011089a9c514382e92153062e70452a309b57eba33710d388cd",
+      "bytes": 3387
+    },
+    "VERSION": {
+      "sha256": "db99cdaafbc939f297091cf6577ce73a1f8e041792b32d86e04eb07c9563726b",
+      "bytes": 6
+    },
+    "tools/validate.py": {
+      "sha256": "ed31c7bf09cfb1f9f0419ebb0cb064e27fe176faa93c8c2684107d252cfd7bea",
+      "bytes": 2781
+    }
+  }
+}
