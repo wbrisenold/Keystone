@@ -50,6 +50,24 @@ def main():
     if re.search(r"(?<![A-Za-z0-9_])PI(?![A-Za-z0-9_])", code):
         errors.append("bare PI identifier found; use a literal or defined Keystone constant")
 
+    # Catch stale/renamed Keystone helper calls before Resolve does.
+    device_defs = set(re.findall(
+        r"__DEVICE__\s+(?:float3|float2|float|int|bool)\s+([A-Za-z_]\w*)\s*\(",
+        text
+    ))
+    all_calls = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", code))
+    prefixes = (
+        "ks_", "skin_", "output_cleanup_", "clean_neutral_", "apply_",
+        "bradford_", "wb_", "fns_", "technical_", "native_",
+        "xyz_to_", "awg3_to_", "logc3_", "oklab_to_"
+    )
+    unresolved = sorted(
+        c for c in all_calls
+        if c.startswith(prefixes) and c not in device_defs
+    )
+    for name in unresolved:
+        errors.append(f"unresolved Keystone helper call: {name}")
+
     functions = re.findall(
         r"__DEVICE__\s+(?:float3|float2|float|int|bool)\s+([A-Za-z_]\w*)\s*\(",
         text

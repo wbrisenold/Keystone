@@ -1,19 +1,18 @@
 {
   "name": "Keystone",
-  "version": "1.9.4",
-  "validation": "Keystone DCTL validation: PASS\n UI controls: 25\n NOTE: static validation does not replace compiling the DCTL in DaVinci Resolve.\nSpreadsheet runtime warmup failed during python startup\nTraceback (most recent call last):\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/patches/warm_spreadsheet_runtime_on_startup.py\", line 26, in warm_spreadsheet_runtime_on_startup\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/spreadsheet_warmup.py\", line 772, in warm_spreadsheet_runtime\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/connection.py\", line 37, in get_or_create_client\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/daemon.py\", line 124, in start_daemon\nTimeoutError: Timed out waiting for artifact tool daemon socket. Set ARTIFACT_TOOL_RPC_DAEMON_STARTUP_TIMEOUT_S=<seconds> to increase the limit.",
-  "release_automation": {
-    "dctl_validation_pass": true,
-    "release_workflow_present": true,
-    "contents_write_permission": true,
-    "auto_on_main": true,
-    "manual_dispatch": true,
-    "creates_tag": true,
-    "creates_release": true,
-    "attaches_dctl": true,
-    "attaches_zip": true,
-    "funding_in_release_package": true,
-    "version_file": "1.9.4"
+  "version": "1.13.1",
+  "validation": "Keystone DCTL validation: PASS\n UI controls: 16\n NOTE: static validation does not replace compiling the DCTL in DaVinci Resolve.\nSpreadsheet runtime warmup failed during python startup\nTraceback (most recent call last):\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/patches/warm_spreadsheet_runtime_on_startup.py\", line 26, in warm_spreadsheet_runtime_on_startup\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/spreadsheet_warmup.py\", line 772, in warm_spreadsheet_runtime\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/connection.py\", line 37, in get_or_create_client\n  File \"/tmp/tmp.L2TH2Y5coc/artifact_tool_v2-2.8.22/artifact_tool/rpc/daemon.py\", line 124, in start_daemon\nTimeoutError: Timed out waiting for artifact tool daemon socket. Set ARTIFACT_TOOL_RPC_DAEMON_STARTUP_TIMEOUT_S=<seconds> to increase the limit.",
+  "implementation_audit": {
+    "version": "1.13.1",
+    "validator_pass": true,
+    "ui_count": 16,
+    "oklab_pos_sat_still_present": true,
+    "density_coupling_present": true,
+    "primera_pos_sat_preserved": true,
+    "old_y_preserve_only_return_removed": true,
+    "unused_device_helpers": [],
+    "contains_while": false,
+    "balanced_braces": true
   },
   "files": {
     ".github/FUNDING.yml": {
@@ -33,32 +32,32 @@
       "bytes": 37
     },
     "CHANGELOG.md": {
-      "sha256": "1fa3aa05eebc996255faacf8410957ce31463bab5b061ca591320db80d187315",
-      "bytes": 1249
+      "sha256": "71500302bb00d2859f67e69ed8b48295abefd849b9ab7ffbb5f0a63fe98ec6ba",
+      "bytes": 6696
     },
     "Keystone.dctl": {
-      "sha256": "a8d86db76cd5295f4f05a528db2845ed25eba8efa379a8b7c1bb0e2af2ceb8f2",
-      "bytes": 45396
+      "sha256": "ffe8f3b9619239567988519acf8cd275c81bd125e7f57a1cb66f05bebe2f7967",
+      "bytes": 38315
     },
     "LICENSE": {
       "sha256": "5a8a7e9b03614b6b5354764f1579a0d2949007f0877473bd5dc9ed39341e1b88",
       "bytes": 1078
     },
     "README.md": {
-      "sha256": "352049926b9004af972ee41c292c06dcfbd992cb682480fa14acfce06fa030a6",
-      "bytes": 4199
+      "sha256": "471cebbe133698a60413ca5d552c2837021eb1ff22b19bd8003b7f4548791dad",
+      "bytes": 5478
     },
     "THIRD_PARTY_NOTICES.md": {
-      "sha256": "3000d80a9c251011089a9c514382e92153062e70452a309b57eba33710d388cd",
-      "bytes": 3387
+      "sha256": "45544444302e834e1c07475c305c075f8003db189b6bd351757282981744c20e",
+      "bytes": 4890
     },
     "VERSION": {
-      "sha256": "db99cdaafbc939f297091cf6577ce73a1f8e041792b32d86e04eb07c9563726b",
-      "bytes": 6
+      "sha256": "ca0bc79c4cde0ad64e1ec9df2882425197b5ba85704a4ac6bd67f8f99936eb25",
+      "bytes": 7
     },
     "tools/validate.py": {
-      "sha256": "ed31c7bf09cfb1f9f0419ebb0cb064e27fe176faa93c8c2684107d252cfd7bea",
-      "bytes": 2781
+      "sha256": "dae23be6fd2c87e3177c7f8a51432841f8c6c24ec2e18dde69ddea9ddc72691a",
+      "bytes": 3470
     }
   }
 }

@@ -2,7 +2,7 @@
 
 Keystone is a DaVinci Resolve DCTL for grading in **ARRI Wide Gamut 3 / LogC3 EI800**. It is designed as a compact balance, tone, color, and skin-shaping node that sits **before the output transform**.
 
-Current version: **v1.9.4**
+Current version: **v1.13.1**
 
 ## Node placement
 
@@ -20,10 +20,10 @@ Keystone expects **AWG3 / LogC3 EI800 in and out**. It does not contain a displa
 - `Input / Fix` — optional ACES 1.3 reference-gamut-compression repair
 
 ### White balance
-- `WB / Hue` — direction around the HDR-style white-balance wheel
-- `WB / Amt` — strength of the white-balance correction
+- `WB / Temp K` — 2500K to 20000K, D65 default 6504K
+- `WB / Tint` — -100 to +100
 
-White balance is not implemented as RGB offsets. Keystone constructs a source-white displacement around D65 and applies a Bradford chromatic adaptation.
+White balance is the **exact implementation from Keystone v1.7 Studio Production Candidate**: CCT is converted to a source-white locus, Tint offsets that white in uv space, then one Bradford chromatic adaptation returns the source white to D65. A scalar normalization keeps D65-neutral scene luminance unchanged.
 
 ### Negative
 - `Neg / R`
@@ -34,40 +34,48 @@ These are printer-light controls inside Keystone's reversible film-negative work
 
 ### Tone
 - `Tone / Exp`
-- `Tone / Black`
+- `Tone / Black Pt`
 - `Tone / Contrast`
+
+`Tone / Black Pt` now uses Primera's exact Black Point behavior: `-0.05` to `+0.05`, step `0.0001`, with the fixed `0.005` soft knee. It runs independently on scene-linear AWG3 R/G/B immediately after Exposure.
+
 - `Tone / Shadows`
 - `Tone / Highlights`
 - `Tone / Roll`
 
-Contrast is applied to scene luminance using the Daniele/Siragusano tone-shape architecture rather than independently reshaping RGB channels.
+Contrast now uses **Primera's rolling contrast equation** independently on AWG3 / LogC3 RGB channels, at Primera's default Pivot of `0.0` (encoded 18% gray). This is intentionally per-channel: the contrast increase also creates the saturation/color-separation behavior of Primera. No separate contrast-saturation coupling is added.
 
 ### Color
-- `Color / Sat`
+- `Color / Pos Sat`
+- `Color / Oklab Pos`
 
-Saturation uses an Oklab hue-preserving chroma model with bounded wide-gamut expansion.
+`Color / Pos Sat` is the Primera-style encoded-domain HSV saturation control:
+1. encode current AWG3 linear RGB to LogC3
+2. convert LogC3 RGB to HSV
+3. multiply HSV saturation by `2^amount`
+4. cap HSV saturation at `1.0`
+5. convert back to RGB and decode LogC3
 
-### Skin
-- `Skin / Range`
-- `Skin / Hue`
-- `Skin / Sat`
-- `Skin / Dense`
-- `Skin / Even`
-- `Skin / Sep`
+`Color / Oklab Pos` is a second, separate positive-only saturation control for direct comparison:
+1. convert current scene XYZ to Oklab
+2. keep Oklab `L` fixed
+3. multiply Oklab chroma by `2^amount`
+4. keep hue angle fixed
+5. convert back to XYZ and rescale to preserve original scene `Y`
+6. apply a **small density coupling** based on the achieved chroma increase
 
-The skin qualifier combines normalized chromaticity, perceptual hue/chroma qualification, and scene-luminance gating. It is color-based, not semantic face detection.
+That density coupling is intentionally modest. Neutrals stay mostly untouched, while more colorful pixels get a slightly richer, denser feel so the Oklab slider is not as clinically clean as a pure lightness-preserving saturation operator.
 
-### Split tone
-- `Split / Sh Hue`
-- `Split / Sh Amt`
-- `Split / Hi Hue`
-- `Split / Hi Amt`
+Both sliders are `0` to `1`, where `0` is exact bypass. For a clean comparison, keep one of them at `0`.
+
 
 ### Output cleanup
 - `Out / White`
 - `Out / Black`
 
 These controls reduce chroma only in near-neutral highlights or shadows while preserving scene luminance.
+
+They retain **automatic skin protection**, but there are no user-facing Skin controls. A small internal fixed skin qualifier is used only to keep Output cleanup from pulling useful color out of faces.
 
 ## Installation
 
@@ -143,7 +151,7 @@ VERSION
 and the first line of `Keystone.dctl`:
 
 ```text
-// Keystone v1.9.4
+// Keystone v1.13.1
 ```
 
 Those two values must match.
