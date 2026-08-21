@@ -1,46 +1,14 @@
-// Keystone v1.13.1
-// DaVinci Resolve DCTL grading tool for ARRI Wide Gamut 3 / LogC3 EI800.
+// Keystone v2.6.1 Matrix-Free Photochemical + Print Filtration + Density Looks
+// SPDX-License-Identifier: GPL-3.0-only
 //
-// Working domain:
-//   Input and output: AWG3 / LogC3 EI800
-//   Internal scene processing: AWG3 linear / XYZ D65 / Oklab as appropriate
+// DaVinci Resolve DCTL for ARRI Wide Gamut 3 / LogC3 EI800.
 //
-// Main controls:
-//   Input Repair
-//   HDR-style WB Hue / Amount
-//   Film-negative printer lights
-//   Exposure / Primera Black Point / Primera Contrast / Shadows / Highlights / Roll Off
-//   Primera Pos Saturation
-//   White / Black cleanup
+// Source-anchored photochemical core. Creative look presets are Keystone-authored
+// translations into the density split-tone engine and are documented as such.
 //
-// Current processing order:
-//   Input Repair
-//   -> WB
-//   -> Exposure
-//   -> Printer Lights
-//   -> Black
-//   -> Daniele Contrast
-//   -> Shadows / Highlights
-//   -> Roll Off
-//   -> Pos Saturation
-//   -> Oklab Pos Saturation
-//   -> Skin Controls
-//   -> White Clean / Black Clean
-//   -> Technical Safety
-//   -> LogC3 EI800
-//
-// Creative defaults are intended as a direct bypass.
-// Keystone does NOT include an ODT.
-//
-// Third-party notices are included in THIRD_PARTY_NOTICES.md.
-// The Daniele tone-scale core follows Thatcher Freeman's MIT-licensed
-// utility-dctls implementation, based on Daniele Siragusano's tone-scale proposal.
-// The optional input repair implements an ACES 1.3 Reference Gamut Compression core.
-// Skin-control design was informed by the MIT-licensed PrimeraSkin workflow.
-//
-// Runtime note:
-// Static validation cannot replace compiling this file inside DaVinci Resolve.
-// See tools/validate.py and .github/workflows/validate.yml.
+// Attribution, upstream links, licenses, and implementation provenance are
+// documented outside the DCTL in README.md, SOURCE_AUDIT.md, and
+// THIRD_PARTY_NOTICES.md.
 
 // ---- ARRI Wide Gamut 3 -> XYZ D65 ----
 #define R2_C0 make_float3(0.638008f,0.291954f,0.002798f)
@@ -61,23 +29,21 @@
 #define G2_C1 make_float3(-0.482533816466f,1.396400099532f,0.082334958727f)
 #define G2_C2 make_float3(-0.200075026387f,0.194432230586f,0.878868163772f)
 
-// ---- OKLab: XYZ D65 <-> OKLab direct precombined matrices ----
-// Direct XYZ D65 <-> Oklab matrices used by the active perceptual operators.
+// ---- OKLab direct XYZ D65 matrices (Keystone v1.13.1) ----
 #define X65_TO_OKLMS_C0 make_float3(0.8190224432f,0.0329836672f,0.0481771996f)
 #define X65_TO_OKLMS_C1 make_float3(0.3619062563f,0.9292868469f,0.2642395197f)
 #define X65_TO_OKLMS_C2 make_float3(-0.1288737826f,0.0361446682f,0.6335478285f)
 #define OKLMS3_TO_X65_C0 make_float3(1.2268798734f,-0.0405757646f,-0.0763729497f)
 #define OKLMS3_TO_X65_C1 make_float3(-0.5578150037f,1.1122868294f,-0.4214933239f)
 #define OKLMS3_TO_X65_C2 make_float3(0.2813910502f,-0.0717110667f,1.5869240244f)
-
-// ---- OKLab ----
 #define O_C0 make_float3(0.2104542553f,1.9779984951f,0.0259040371f)
 #define O_C1 make_float3(0.793617785f,-2.428592205f,0.7827717662f)
 #define O_C2 make_float3(-0.0040720468f,0.4505937099f,-0.808675766f)
 #define P_C0 make_float3(1.0f,1.0f,1.0f)
 #define P_C1 make_float3(0.3963377774f,-0.1055613458f,-0.0894841775f)
 #define P_C2 make_float3(0.2158037573f,-0.0638541728f,-1.291485548f)
-// AP1 wrapper matrices used only by optional ACES 1.3 RGC.
+
+// AP1 wrapper used only by optional ACES 1.3 Reference Gamut Compression.
 #define X65_TO_AP1_C0 make_float3(1.645137477880f,-0.663190970565f,0.011827536679f)
 #define X65_TO_AP1_C1 make_float3(-0.305728269983f,1.605239925856f,-0.011607564142f)
 #define X65_TO_AP1_C2 make_float3(-0.236812415835f,0.023041811312f,0.918561032294f)
@@ -85,7 +51,7 @@
 #define AP1_TO_X65_C1 make_float3(0.126453267991f,0.675103815523f,0.006902836343f)
 #define AP1_TO_X65_C2 make_float3(0.166370741628f,0.053129008203f,1.087188452940f)
 
-// ---- LogC3 EI800 + WB constants ----
+// ---- LogC3 EI800 + WB constants (Keystone v1.13.1) ----
 #define LOGC3_CUT 0.010591f
 #define LOGC3_A 5.555556f
 #define LOGC3_B 0.052272f
@@ -103,21 +69,50 @@
 #define WB_UV_D65_V 0.3122133300f
 #define LN2 0.6931471805599453094f
 
-// ---- INPUT ----
-DEFINE_UI_PARAMS(input_gamut_heal, Input / Fix, DCTLUI_COMBO_BOX, 0, {heal_off,heal_aces_rgc},{Off,ACES 1.3 RGC})
 
-// ---- WB ----
+// ---- Photochemical constants/defaults ----
+#define KS_LOG10_2 0.301029996f
+#define KS_PRINTER_PT 0.025f
+#define KS_18_GRAY 0.18f
+#define KS_GRAY_D 0.744727f
+#define KS_LIN_TINY 1.0e-8f
+#define KS_DYE_KNEE 2.2f
+
+// Gray-balanced reference profile: identical RGB channels.
+#define KS_NEG_DMIN 0.15f
+#define KS_NEG_DMAX 2.90f
+#define KS_NEG_GAMMA 0.62f
+#define KS_NEG_TOE 2.5f
+#define KS_NEG_SHOULDER 2.5f
+#define KS_NEG_SPEED -1.5f
+#define KS_PRN_DMIN 0.10f
+#define KS_PRN_DMAX 3.30f
+#define KS_PRN_GAMMA 2.60f
+#define KS_PRN_TOE 3.5f
+#define KS_PRN_SHOULDER 2.2f
+#define KS_PRN_SPEED -1.75f
+
+// Behavioral profile-family selector values. These are family shapes, not named stocks.
+#define KS_PROFILE_NEUTRAL 0
+#define KS_PROFILE_LATITUDE 1
+#define KS_PROFILE_PUNCH 2
+#define KS_PROFILE_CHROME 3
+
+// ---- UI ----
+DEFINE_UI_PARAMS(input_gamut_heal, Input / Fix, DCTLUI_COMBO_BOX, 0, {heal_off,heal_aces_rgc},{Off,ACES 1.3 RGC})
+DEFINE_UI_PARAMS(diag_view, View / Mode, DCTLUI_COMBO_BOX, 0, {view_result,view_neutral,view_density,view_gamut,view_skin},{Result,Neutral Chroma,Density,Gamut Stress,Skin Mask})
+
 DEFINE_UI_PARAMS(temp, WB / Temp K, DCTLUI_SLIDER_FLOAT, 6504.0, 2500.0, 20000.0, 25.0)
 DEFINE_UI_PARAMS(tint, WB / Tint, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 0.1)
 
-// ---- NEGATIVE DEVELOPMENT ----
-// Keystone's negative response is fixed technical plumbing; only live printer lights are exposed.
-DEFINE_UI_PARAMS(fns_printer_r, Neg / R, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
-DEFINE_UI_PARAMS(fns_printer_g, Neg / G, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
-DEFINE_UI_PARAMS(fns_printer_b, Neg / B, DCTLUI_SLIDER_FLOAT, 25.0, 0.0, 50.0, 0.1)
+// Camera spectral-cut controls. The source model is spectral; Keystone uses an explicitly
+// documented RGB projection because a DCTL has no wavelength-resolved film sensitivity.
 
-// ---- TONE ----
-// Exposure is true scene-linear stops. Contrast uses Primera rolling contrast in LogC3.
+// Existing negative-space RGB printer-light trims. Neutral = 25.
+DEFINE_UI_PARAMS(fns_printer_r, Neg / R, DCTLUI_SLIDER_FLOAT, 25.0, 10.0, 40.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_g, Neg / G, DCTLUI_SLIDER_FLOAT, 25.0, 10.0, 40.0, 0.1)
+DEFINE_UI_PARAMS(fns_printer_b, Neg / B, DCTLUI_SLIDER_FLOAT, 25.0, 10.0, 40.0, 0.1)
+
 DEFINE_UI_PARAMS(p_exposure, Tone / Exp, DCTLUI_SLIDER_FLOAT, 0.0, -6.0, 6.0, 0.01)
 DEFINE_UI_PARAMS(p_bp, Tone / Black Pt, DCTLUI_SLIDER_FLOAT, 0.0, -0.05, 0.05, 0.0001)
 DEFINE_UI_PARAMS(p_contrast, Tone / Contrast, DCTLUI_SLIDER_FLOAT, 1.0, 0.5, 2.0, 0.001)
@@ -125,41 +120,123 @@ DEFINE_UI_PARAMS(p_shadows, Tone / Shadows, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0,
 DEFINE_UI_PARAMS(p_highlights, Tone / Highlights, DCTLUI_SLIDER_FLOAT, 0.0, -1.0, 1.0, 0.01)
 DEFINE_UI_PARAMS(p_high_soft, Tone / Roll, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 2.0, 0.01)
 
-// ---- COLOR ----
-DEFINE_UI_PARAMS(pos_saturation, Color / Pos Sat, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
-DEFINE_UI_PARAMS(oklab_pos_saturation, Color / Oklab Pos, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
+// Film workflow. Profile values are source-locked behavioral-family presets.
+DEFINE_UI_PARAMS(film_strength, Film / Strength, DCTLUI_SLIDER_FLOAT, 1.0, 0.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(film_profile, Film / Profile, DCTLUI_COMBO_BOX, 0, {profile_neutral,profile_latitude,profile_punch,profile_chrome},{Neutral,Latitude,Punch,Chrome})
+DEFINE_UI_PARAMS(film_printer_master, Film / Print M, DCTLUI_SLIDER_FLOAT, 0.0, -12.0, 12.0, 0.1)
+// Enlarger filtration in Kodak CC-density shifts. Positive C/M/Y reduces the corresponding
+// red/green/blue print exposure in this ideal-channel projection.
+DEFINE_UI_PARAMS(print_c_cc, Print / C CC, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 1.0)
+DEFINE_UI_PARAMS(print_m_cc, Print / M CC, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 1.0)
+DEFINE_UI_PARAMS(print_y_cc, Print / Y CC, DCTLUI_SLIDER_FLOAT, 0.0, -100.0, 100.0, 1.0)
+DEFINE_UI_PARAMS(film_response_on, Film / Resp On, DCTLUI_CHECK_BOX, 1)
+DEFINE_UI_PARAMS(film_response, Film / Response, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(dir_on, Film / DIR On, DCTLUI_CHECK_BOX, 1)
+DEFINE_UI_PARAMS(dir_amount, Film / DIR, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
 
-// ---- OUTPUT ----
+// Density-dye controls. The dye knee is source-locked at 2.2.
+DEFINE_UI_PARAMS(color_on, Color / Film On, DCTLUI_CHECK_BOX, 1)
+DEFINE_UI_PARAMS(pos_sat, Color / Pos Sat, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
+DEFINE_UI_PARAMS(dye_couple, Color / Dye, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.001)
+
+// Direct density split-tone parameterization. No Hue->RGB conversion is used.
+DEFINE_UI_PARAMS(split_on, Split / On, DCTLUI_CHECK_BOX, 1)
+DEFINE_UI_PARAMS(split_preset, Split / Preset, DCTLUI_COMBO_BOX, 0, {sp_custom,sp_warm_cool,sp_cool_warm,sp_amber_cyan,sp_cyan_amber,sp_olive_cream,sp_teal_orange,sp_warm_vintage,sp_cool_silver,sp_sodium_cyan,sp_moon_warm_skin,sp_sepia,sp_bleach_cool,sp_golden_hour,sp_dusk_purple,sp_tobacco_teal},{Custom,Warm Cool,Cool Warm,Amber Cyan,Cyan Amber,Olive Cream,Teal Orange,Warm Vintage,Cool Silver,Sodium Cyan,Moonlight Warm Skin,Sepia,Bleach Cool,Golden Hour,Dusk Purple,Tobacco Teal})
+DEFINE_UI_PARAMS(split_preset_amt, Split / Preset Amt, DCTLUI_SLIDER_FLOAT, 1.0, 0.0, 1.5, 0.01)
+DEFINE_UI_PARAMS(split_sh_r, Split / Sh R, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_sh_g, Split / Sh G, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_sh_b, Split / Sh B, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_hi_r, Split / Hi R, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_hi_g, Split / Hi G, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_hi_b, Split / Hi B, DCTLUI_SLIDER_FLOAT, 0.0, -0.3, 0.3, 0.005)
+DEFINE_UI_PARAMS(split_pivot, Split / Pivot, DCTLUI_SLIDER_FLOAT, 0.0, -3.0, 3.0, 0.05)
+DEFINE_UI_PARAMS(split_balance, Split / Width, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.01)
+
 DEFINE_UI_PARAMS(white_gamut_clean, Out / White, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
 DEFINE_UI_PARAMS(black_gamut_clean, Out / Black, DCTLUI_SLIDER_FLOAT, 0.0, 0.0, 1.0, 0.01)
+DEFINE_UI_PARAMS(safe_mode, Out / Safe, DCTLUI_CHECK_BOX, 1)
 
-// ---- Helpers ----
-__DEVICE__ float clampf(float v, float lo, float hi) { return _fmaxf(lo, _fminf(hi, v)); }
+
+// ---- Resolve 19.1+ hover help ----
+// DEFINE_UI_TOOLTIP references the visible UI label, not the parameter identifier.
+DEFINE_UI_TOOLTIP(Input / Fix, "Repairs extreme input gamut before grading. Leave Off normally; use ACES 1.3 RGC when highly saturated colors arrive outside a usable gamut.")
+DEFINE_UI_TOOLTIP(View / Mode, "Diagnostic output only. Result shows the grade; Neutral Chroma shows distance from neutral, Density shows optical density, Gamut Stress marks pixels the safety guard would alter, and Skin Mask shows cleanup protection.")
+DEFINE_UI_TOOLTIP(WB / Temp K, "Sets source color temperature for Bradford white balance. Match the scene/light source first; 6504 K is neutral D65.")
+DEFINE_UI_TOOLTIP(WB / Tint, "Moves white balance along the green-magenta axis after Temp. Use small moves to remove residual green or magenta casts.")
+DEFINE_UI_TOOLTIP(Neg / R, "Red printer-light trim inside Keystone's negative space. 25 is neutral; raise to add red, lower to reduce red. Balance with G and B rather than using large single-channel moves.")
+DEFINE_UI_TOOLTIP(Neg / G, "Green printer-light trim inside Keystone's negative space. 25 is neutral; raise to add green, lower to reduce green. Use for fine color timing after WB.")
+DEFINE_UI_TOOLTIP(Neg / B, "Blue printer-light trim inside Keystone's negative space. 25 is neutral; raise to add blue, lower to reduce blue. Use for fine color timing after WB.")
+DEFINE_UI_TOOLTIP(Tone / Exp, "True scene-linear exposure in stops. Use this for overall brightness before contrast and film response; 1.0 equals one stop brighter.")
+DEFINE_UI_TOOLTIP(Tone / Black Pt, "Soft black-point trim. Use tiny moves to set the floor without hard clipping; large moves can crush or lift the deepest tones quickly.")
+DEFINE_UI_TOOLTIP(Tone / Contrast, "Rolling LogC3 contrast around the 18% gray pivot. Above 1 adds contrast; below 1 softens it. Set exposure first, then shape contrast.")
+DEFINE_UI_TOOLTIP(Tone / Shadows, "Broad scene-luminance shadow exposure trim. Adjust dark regions without directly tinting channels; use modest values to keep the toe natural.")
+DEFINE_UI_TOOLTIP(Tone / Highlights, "Broad scene-luminance highlight exposure trim. Use to open or restrain bright regions before Roll; it is not a white-point control.")
+DEFINE_UI_TOOLTIP(Tone / Roll, "Adds a smooth highlight shoulder above roughly +2.5 EV. Increase only as needed to soften bright peaks while preserving lower tones.")
+DEFINE_UI_TOOLTIP(Film / Strength, "Keystone workflow master for the photochemical modules. 1 keeps their set amounts; lower it proportionally reduces Response, DIR, Pos Sat, dye coupling, split offsets and the film printer master without changing WB, exposure or tone controls.")
+DEFINE_UI_TOOLTIP(Film / Profile, "Selects a source-defined behavioral H&D family: Neutral, Latitude, Punch, or Chrome. These are family shapes, not commercial stock matches.")
+DEFINE_UI_TOOLTIP(Film / Print M, "Master printer-light exposure in printer points, injected between negative and print. 0 is neutral; one point equals 0.025 log10 exposure. Use for overall print timing while Neg R/G/B remain available for color timing.")
+DEFINE_UI_TOOLTIP(Print / C CC, "Cyan enlarger filtration shift in Kodak CC density units. 100 CC equals 1.0 optical density. Positive C reduces red print exposure; requires Film Response to be active.")
+DEFINE_UI_TOOLTIP(Print / M CC, "Magenta enlarger filtration shift in Kodak CC density units. Positive M reduces green print exposure; requires Film Response to be active.")
+DEFINE_UI_TOOLTIP(Print / Y CC, "Yellow enlarger filtration shift in Kodak CC density units. Positive Y reduces blue print exposure; requires Film Response to be active.")
+DEFINE_UI_TOOLTIP(Film / Resp On, "Bypasses only the H&D negative-to-print response while preserving the slider setting for A/B comparison.")
+DEFINE_UI_TOOLTIP(Film / Response, "Blends in the negative-to-print H&D response. 0 is bypass; raise gradually for film-like toe, straight-line contrast, and shoulder behavior.")
+DEFINE_UI_TOOLTIP(Film / DIR On, "Bypasses only DIR inhibitor feedback while preserving its amount for A/B comparison.")
+DEFINE_UI_TOOLTIP(Film / DIR, "Adds non-spatial DIR inhibitor feedback between emulsion layers. Start low; higher values increase inter-layer development interaction and color separation.")
+DEFINE_UI_TOOLTIP(Color / Film On, "Bypasses Pos Sat and density-domain dye coupling together while preserving both slider settings.")
+DEFINE_UI_TOOLTIP(Color / Pos Sat, "Positive saturation in LogC3 using HSV. 0 is unchanged; 1 doubles HSV saturation up to its natural ceiling. Use this for clean saturation before split toning.")
+DEFINE_UI_TOOLTIP(Color / Dye, "Density-domain asymmetric dye coupling. Bends color relationships toward imperfect film-dye behavior independently from Pos Sat. Keep moderate if skin or saturated colors shift too far.")
+DEFINE_UI_TOOLTIP(Split / On, "Bypasses the complete density split-tone block while preserving all split settings.")
+DEFINE_UI_TOOLTIP(Split / Preset, "Loads a Keystone density-look family into the split-tone engine. The first ten preserve the shadow/highlight intent of Advanced Toning presets; newer entries are Keystone-authored familiar tone families. Manual Sh/Hi density sliders trim on top.")
+DEFINE_UI_TOOLTIP(Split / Preset Amt, "Scales only the selected preset's density offsets. 0 removes the preset while keeping manual split trims; 1 is the designed amount; values above 1 intensify it.")
+DEFINE_UI_TOOLTIP(Split / Sh R, "Red density offset in the shadow zone. Positive density removes red light; negative density adds red. Use with Sh G/B for a shadow tint while the pivot stays untouched.")
+DEFINE_UI_TOOLTIP(Split / Sh G, "Green density offset in the shadow zone. Positive density removes green light; negative density adds green. Combine channels to build the desired shadow hue.")
+DEFINE_UI_TOOLTIP(Split / Sh B, "Blue density offset in the shadow zone. Positive density removes blue light; negative density adds blue. Combine channels to build the desired shadow hue.")
+DEFINE_UI_TOOLTIP(Split / Hi R, "Red density offset in the highlight zone. Positive density removes red light; negative density adds red. Use with Hi G/B for highlight toning without dragging the pivot.")
+DEFINE_UI_TOOLTIP(Split / Hi G, "Green density offset in the highlight zone. Positive density removes green light; negative density adds green. Combine channels to build the desired highlight hue.")
+DEFINE_UI_TOOLTIP(Split / Hi B, "Blue density offset in the highlight zone. Positive density removes blue light; negative density adds blue. Combine channels to build the desired highlight hue.")
+DEFINE_UI_TOOLTIP(Split / Pivot, "Moves the split-tone neutral anchor in stops relative to 18% gray. Pixels at the pivot receive no split-tone offset; move it toward the tonal region you want protected.")
+DEFINE_UI_TOOLTIP(Split / Width, "Controls how wide the untouched midtone zone is. Lower values let tint approach mid-gray; higher values confine tint more to shadows and highlights.")
+DEFINE_UI_TOOLTIP(Out / White, "Reduces chroma only in bright, already-near-neutral areas while preserving scene Y and protecting skin. Use to clean colored whites, not to desaturate highlights globally.")
+DEFINE_UI_TOOLTIP(Out / Black, "Reduces chroma only in deep, already-near-neutral shadows while preserving scene Y and protecting skin. Use to clean colored blacks without stripping intentional shadow color.")
+DEFINE_UI_TOOLTIP(Out / Safe, "Runs Keystone's existing encoded-negative safety guard immediately after the film block as well as at output. It only intervenes when that guard would otherwise alter the signal later.")
+
+// ---- Common helpers ----
+__DEVICE__ float clampf(float v,float lo,float hi){return _fmaxf(lo,_fminf(hi,v));}
 __DEVICE__ float3 mmul(float3 c0,float3 c1,float3 c2,float3 v){return make_float3(c0.x*v.x+c1.x*v.y+c2.x*v.z,c0.y*v.x+c1.y*v.y+c2.y*v.z,c0.z*v.x+c1.z*v.y+c2.z*v.z);}
-__DEVICE__ float cbrt_s(float x){return(x<0.0f?-1.0f:1.0f)*_powf(_fabs(x),1.0f/3.0f);}
 __DEVICE__ int finitef(float x){return (x==x&&_fabs(x)<3.402823e38f)?1:0;}
-// ---- Fixed Studio gamut: ARRI Wide Gamut 3 <-> XYZ D65 ----
+__DEVICE__ float cbrt_s(float x){return(x<0.0f?-1.0f:1.0f)*_powf(_fabs(x),1.0f/3.0f);}
+__DEVICE__ float smootherstep(float e0,float e1,float x){float span=e1-e0;if(span<=1.0e-12f)return x>=e1?1.0f:0.0f;x=clampf((x-e0)/span,0.0f,1.0f);return x*x*x*(x*(x*6.0f-15.0f)+10.0f);}
+// ---- Density-domain safety gates ----
+// Density transforms are defined only for positive linear-light channels.
+// Fade the effect out continuously as any channel approaches the invalid domain.
+__DEVICE__ float ks_density_gate(float3 rgb){
+  float m=_fminf(rgb.x,_fminf(rgb.y,rgb.z));
+  return smootherstep(1.0e-5f,2.0e-3f,m);
+}
+__DEVICE__ float ks_neutral_activity(float3 rgb){
+  float mx=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z));
+  float mn=_fminf(rgb.x,_fminf(rgb.y,rgb.z));
+  float denom=_fmaxf(_fabs(mx),1.0e-5f);
+  float c=(mx-mn)/denom;
+  return smootherstep(0.008f,0.055f,c);
+}
+__DEVICE__ float ks_soft_limit01(float x){
+  x=clampf(x,0.0f,1.0f);
+  return x/(1.0f+0.35f*x);
+}
+
+__DEVICE__ float smooth01(float t){t=clampf(t,0.0f,1.0f);return t*t*(3.0f-2.0f*t);}
+__DEVICE__ float3 mix3(float3 a,float3 b,float t){return a+(b-a)*make_float3(t,t,t);}
+
 __DEVICE__ float3 awg3_to_xyz(float3 v){return mmul(R2_C0,R2_C1,R2_C2,v);}
 __DEVICE__ float3 xyz_to_awg3(float3 v){return mmul(G2_C0,G2_C1,G2_C2,v);}
 
-// ---- Fixed ARRI LogC3 EI800 ----
-__DEVICE__ float logc3_decode_ei800_scalar(float t){
-  float cv=LOGC3_E*LOGC3_CUT+LOGC3_F;
-  return t>cv?(_powf(10.0f,(t-LOGC3_D)/LOGC3_C)-LOGC3_B)/LOGC3_A:(t-LOGC3_F)/LOGC3_E;
-}
-__DEVICE__ float logc3_encode_ei800_scalar(float x){
-  return x>LOGC3_CUT?LOGC3_C*_log10f(LOGC3_A*x+LOGC3_B)+LOGC3_D:LOGC3_E*x+LOGC3_F;
-}
-__DEVICE__ float3 logc3_decode_ei800(float3 v){
-  return make_float3(logc3_decode_ei800_scalar(v.x),logc3_decode_ei800_scalar(v.y),logc3_decode_ei800_scalar(v.z));
-}
-__DEVICE__ float3 logc3_encode_ei800(float3 v){
-  return make_float3(logc3_encode_ei800_scalar(v.x),logc3_encode_ei800_scalar(v.y),logc3_encode_ei800_scalar(v.z));
-}
+__DEVICE__ float logc3_decode_ei800_scalar(float t){float cv=LOGC3_E*LOGC3_CUT+LOGC3_F;return t>cv?(_powf(10.0f,(t-LOGC3_D)/LOGC3_C)-LOGC3_B)/LOGC3_A:(t-LOGC3_F)/LOGC3_E;}
+__DEVICE__ float logc3_encode_ei800_scalar(float x){return x>LOGC3_CUT?LOGC3_C*_log10f(LOGC3_A*x+LOGC3_B)+LOGC3_D:LOGC3_E*x+LOGC3_F;}
+__DEVICE__ float3 logc3_decode_ei800(float3 v){return make_float3(logc3_decode_ei800_scalar(v.x),logc3_decode_ei800_scalar(v.y),logc3_decode_ei800_scalar(v.z));}
+__DEVICE__ float3 logc3_encode_ei800(float3 v){return make_float3(logc3_encode_ei800_scalar(v.x),logc3_encode_ei800_scalar(v.y),logc3_encode_ei800_scalar(v.z));}
 
-__DEVICE__ float smootherstep(float e0,float e1,float x){float span=e1-e0;if(span<=1e-12f)return x>=e1?1.0f:0.0f;x=clampf((x-e0)/span,0.0f,1.0f);return x*x*x*(x*(x*6.0f-15.0f)+10.0f);}
-
-// ---- OKLab ----
+// ---- OKLab (unchanged from Keystone v1.13.1) ----
 __DEVICE__ float3 xyz_to_oklab(float3 xyz){float3 lms=mmul(X65_TO_OKLMS_C0,X65_TO_OKLMS_C1,X65_TO_OKLMS_C2,xyz);lms=make_float3(cbrt_s(lms.x),cbrt_s(lms.y),cbrt_s(lms.z));return mmul(O_C0,O_C1,O_C2,lms);}
 __DEVICE__ float3 oklab_to_xyz(float3 lab){float3 lms=mmul(P_C0,P_C1,P_C2,lab);lms=make_float3(lms.x*lms.x*lms.x,lms.y*lms.y*lms.y,lms.z*lms.z*lms.z);return mmul(OKLMS3_TO_X65_C0,OKLMS3_TO_X65_C1,OKLMS3_TO_X65_C2,lms);}
 __DEVICE__ float3 oklab_to_xyz_preserve_y_safe(float3 lab,float targetY){
@@ -180,37 +257,16 @@ __DEVICE__ float3 oklab_to_xyz_preserve_y_safe(float3 lab,float targetY){
   return out*make_float3(k,k,k);
 }
 
-// ---- Keystone v1.7 Studio Production Candidate white balance ----
-// Exact v1.7 Kelvin/Tint source-white math and Bradford CAT implementation.
-// UI:
-//   WB / Temp K : 2500K..20000K, D65 default 6504K
-//   WB / Tint   : -100..100
-//
-// This replaces the later Hue/Amt/Warm/Tint wheel implementation.
-
+// ---- Exact Keystone v1.7 Kelvin/Tint Bradford WB ----
 __DEVICE__ float2 cct_to_xy(float k){
   float k2=k*k,k3=k2*k;
   float x=k<=4000.0f?-0.2661239e9f/k3-0.2343580e6f/k2+0.8776956e3f/k+0.179910f:-3.0258469e9f/k3+2.1070379e6f/k2+0.2226347e3f/k+0.240390f;
   float y=k<=4000.0f?-1.1063814f*x*x*x-1.34811020f*x*x+2.18555832f*x-0.20219683f:3.0817580f*x*x*x-5.8733867f*x*x+3.75112997f*x-0.37001483f;
   return make_float2(x,y);
 }
-
-__DEVICE__ float2 xy_to_uv(float2 xy){
-  float den=-2.0f*xy.x+12.0f*xy.y+3.0f;
-  if(_fabs(den)<1e-8f)return make_float2(WB_UV_D65_U,WB_UV_D65_V);
-  return make_float2(4.0f*xy.x/den,6.0f*xy.y/den);
-}
-
-__DEVICE__ float2 uv_to_xy(float2 uv){
-  float den=2.0f*uv.x-8.0f*uv.y+4.0f;
-  if(_fabs(den)<1e-8f)return make_float2(0.3127f,0.3290f);
-  return make_float2(3.0f*uv.x/den,2.0f*uv.y/den);
-}
-
-__DEVICE__ float wb_kelvin(float temp_value){
-  return clampf(temp_value,WB_KMIN,WB_KMAX);
-}
-
+__DEVICE__ float2 xy_to_uv(float2 xy){float den=-2.0f*xy.x+12.0f*xy.y+3.0f;if(_fabs(den)<1e-8f)return make_float2(WB_UV_D65_U,WB_UV_D65_V);return make_float2(4.0f*xy.x/den,6.0f*xy.y/den);}
+__DEVICE__ float2 uv_to_xy(float2 uv){float den=2.0f*uv.x-8.0f*uv.y+4.0f;if(_fabs(den)<1e-8f)return make_float2(0.3127f,0.3290f);return make_float2(3.0f*uv.x/den,2.0f*uv.y/den);}
+__DEVICE__ float wb_kelvin(float temp_value){return clampf(temp_value,WB_KMIN,WB_KMAX);}
 __DEVICE__ float3 wb_source_white_xyz(float temp_value,float tint_value){
   if(_fabs(temp_value-WB_K0)<=1e-4f&&_fabs(tint_value)<=1e-7f)return WHITE_D65;
   float k=wb_kelvin(temp_value);
@@ -223,706 +279,414 @@ __DEVICE__ float3 wb_source_white_xyz(float temp_value,float tint_value){
   float tx=uv_hi.x-uv_lo.x,ty=uv_hi.y-uv_lo.y;
   float len=_sqrtf(tx*tx+ty*ty);
   float nx=0.0f,ny=0.0f;
-  if(len>1e-12f){float inv=1.0f/len;nx=ty*inv;ny=-tx*inv;} // sign chosen so +Tint is magenta correction
+  if(len>1e-12f){float inv=1.0f/len;nx=ty*inv;ny=-tx*inv;}
   float duv=clampf(tint_value/100.0f,-1.0f,1.0f)*WB_TINT_MAX_DUV;
   float2 xy=uv_to_xy(make_float2(uv_temp.x+nx*duv,uv_temp.y+ny*duv));
   if(xy.y<=1e-6f||xy.x!=xy.x||xy.y!=xy.y)return WHITE_D65;
   return make_float3(xy.x/xy.y,1.0f,(1.0f-xy.x-xy.y)/xy.y);
 }
-
 __DEVICE__ float3 bradford_cone(float3 xyz){return mmul(BRADFORD_C0,BRADFORD_C1,BRADFORD_C2,xyz);}
-
 __DEVICE__ float3 bradford_from_cone(float3 lms){return mmul(BRADFORD_INV_C0,BRADFORD_INV_C1,BRADFORD_INV_C2,lms);}
-
-__DEVICE__ float wb_cat_ratio(float dst,float src){
-  if(_fabs(src)<=1.0e-8f)return 1.0f;
-  return clampf(dst/src,0.10f,10.0f);
-}
-
+__DEVICE__ float wb_cat_ratio(float dst,float src){if(_fabs(src)<=1.0e-8f)return 1.0f;return clampf(dst/src,0.10f,10.0f);}
 __DEVICE__ float3 apply_bradford_wb_xyz(float3 xyz,float temp_value,float tint_value){
   if(_fabs(temp_value-WB_K0)<=1.0e-4f&&_fabs(tint_value)<=1.0e-7f)return xyz;
-
   float3 source_white=wb_source_white_xyz(temp_value,tint_value);
   float3 src_lms=bradford_cone(source_white);
   float3 dst_lms=bradford_cone(WHITE_D65);
-  float3 scale=make_float3(
-    wb_cat_ratio(dst_lms.x,src_lms.x),
-    wb_cat_ratio(dst_lms.y,src_lms.y),
-    wb_cat_ratio(dst_lms.z,src_lms.z));
-
+  float3 scale=make_float3(wb_cat_ratio(dst_lms.x,src_lms.x),wb_cat_ratio(dst_lms.y,src_lms.y),wb_cat_ratio(dst_lms.z,src_lms.z));
   float3 cone=bradford_cone(xyz);
   float3 adapted=bradford_from_cone(make_float3(cone.x*scale.x,cone.y*scale.y,cone.z*scale.z));
-
-  // Exposure-neutral normalization: a D65 neutral can change chromaticity under the
-  // creative WB move, but its Y remains unchanged.
   float3 d65_cone=bradford_cone(WHITE_D65);
   float3 d65_test=bradford_from_cone(make_float3(d65_cone.x*scale.x,d65_cone.y*scale.y,d65_cone.z*scale.z));
-  if(d65_test.y>1.0e-8f){
-    float k=1.0f/d65_test.y;
-    adapted=adapted*make_float3(k,k,k);
-  }
+  if(d65_test.y>1.0e-8f){float k=1.0f/d65_test.y;adapted=adapted*make_float3(k,k,k);}
   return adapted;
 }
 
-// ---- Internal Film Negative Space working-space helpers ----
-// Public behavior matched at the signal-model level:
-//   scene-linear pivot remap, independent power above/below middle gray,
-//   optional smooth transition around the pivot, printer-light density offsets,
-//   and an exact inverse around Keystone's creative block.
-// This is Keystone's own implementation; it does not copy the external DCTL source.
+// ---- Negative-space RGB printer-light implementation ----
 #define KEYSTONE_FNS_MID_IN 0.18f
 #define KEYSTONE_FNS_MID_OUT 0.42f
 #define KEYSTONE_FNS_BELOW 0.85f
 #define KEYSTONE_FNS_ABOVE 0.75f
 #define KEYSTONE_FNS_BLEND 0.30f
-
-__DEVICE__ float fns_printer_gain(float point){
-  // One printer point represents 0.025 log10 exposure-density units. Neutral is 25.
-  float density=(point-25.0f)*0.025f;
-  return _powf(10.0f,density);
-}
+__DEVICE__ float fns_printer_gain(float point){float density=(point-25.0f)*0.025f;return _powf(10.0f,density);}
 __DEVICE__ float fns_smooth_integral(float q){return q*q*q-0.5f*q*q*q*q;}
 __DEVICE__ float fns_log_response(float stop,float below,float above,float blend){
   if(blend<=1.0e-7f)return stop<0.0f?below*stop:above*stop;
-  float d=above-below;
-  float F0=fns_smooth_integral(0.5f);
-  if(stop<=-blend){
-    float q=0.0f;
-    float vb=below*(-blend)+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
-    return vb+below*(stop+blend);
-  }
-  if(stop>=blend){
-    float q=1.0f;
-    float vb=below*blend+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
-    return vb+above*(stop-blend);
-  }
-  float q=(stop+blend)/(2.0f*blend);
-  return below*stop+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
+  float d=above-below;float F0=fns_smooth_integral(0.5f);
+  if(stop<=-blend){float vb=below*(-blend)+d*(2.0f*blend)*(fns_smooth_integral(0.0f)-F0);return vb+below*(stop+blend);}
+  if(stop>=blend){float vb=below*blend+d*(2.0f*blend)*(fns_smooth_integral(1.0f)-F0);return vb+above*(stop-blend);}
+  float q=(stop+blend)/(2.0f*blend);return below*stop+d*(2.0f*blend)*(fns_smooth_integral(q)-F0);
 }
 __DEVICE__ float fns_forward_characteristic(float x,float mid_in,float mid_out,float below,float above,float blend){
-  float scale=mid_out/_fmaxf(mid_in,1.0e-8f);
-  if(x<=0.0f)return x*scale;
-  float ratio=x/_fmaxf(mid_in,1.0e-8f);
-  float stop=_log2f(_fmaxf(ratio,1.0e-20f));
-  float out_stop=fns_log_response(stop,below,above,blend);
-  out_stop=clampf(out_stop,-120.0f,120.0f);
+  float scale=mid_out/_fmaxf(mid_in,1.0e-8f);if(x<=0.0f)return x*scale;
+  float stop=_log2f(_fmaxf(x/_fmaxf(mid_in,1.0e-8f),1.0e-20f));
+  float out_stop=clampf(fns_log_response(stop,below,above,blend),-120.0f,120.0f);
   return mid_out*_powf(2.0f,out_stop);
 }
 __DEVICE__ float fns_inverse_characteristic(float y,float mid_in,float mid_out,float below,float above,float blend){
-  float inv_scale=mid_in/_fmaxf(mid_out,1.0e-8f);
-  if(y<=0.0f)return y*inv_scale;
-
+  float inv_scale=mid_in/_fmaxf(mid_out,1.0e-8f);if(y<=0.0f)return y*inv_scale;
   float out_stop=_log2f(_fmaxf(y/_fmaxf(mid_out,1.0e-8f),1.0e-30f));
-
-  if(blend<=1.0e-7f){
-    float p=out_stop<0.0f?_fmaxf(below,1.0e-6f):_fmaxf(above,1.0e-6f);
-    float stop=clampf(out_stop/p,-120.0f,120.0f);
-    return mid_in*_powf(2.0f,stop);
-  }
-
-  float b=_fmaxf(blend,1.0e-6f);
-  float d=above-below;
-  float F0=fns_smooth_integral(0.5f);
+  if(blend<=1.0e-7f){float p=out_stop<0.0f?_fmaxf(below,1.0e-6f):_fmaxf(above,1.0e-6f);return mid_in*_powf(2.0f,clampf(out_stop/p,-120.0f,120.0f));}
+  float b=_fmaxf(blend,1.0e-6f),d=above-below,F0=fns_smooth_integral(0.5f);
   float neg_edge=below*(-b)+d*(2.0f*b)*(fns_smooth_integral(0.0f)-F0);
-  float pos_edge=below*( b)+d*(2.0f*b)*(fns_smooth_integral(1.0f)-F0);
-
+  float pos_edge=below*b+d*(2.0f*b)*(fns_smooth_integral(1.0f)-F0);
   float stop;
-  if(out_stop<=neg_edge){
-    stop=-b+(out_stop-neg_edge)/_fmaxf(below,1.0e-6f);
-  }else if(out_stop>=pos_edge){
-    stop=b+(out_stop-pos_edge)/_fmaxf(above,1.0e-6f);
-  }else{
-    float lo=-b,hi=b;
-    for(int i=0;i<24;i++){
-      float m=(lo+hi)*0.5f;
-      float f=fns_log_response(m,below,above,b);
-      if(f<out_stop)lo=m;else hi=m;
-    }
-    stop=(lo+hi)*0.5f;
-  }
-
-  stop=clampf(stop,-120.0f,120.0f);
-  return mid_in*_powf(2.0f,stop);
+  if(out_stop<=neg_edge)stop=-b+(out_stop-neg_edge)/_fmaxf(below,1.0e-6f);
+  else if(out_stop>=pos_edge)stop=b+(out_stop-pos_edge)/_fmaxf(above,1.0e-6f);
+  else{float lo=-b,hi=b;for(int i=0;i<24;i++){float m=(lo+hi)*0.5f;float f=fns_log_response(m,below,above,b);if(f<out_stop)lo=m;else hi=m;}stop=(lo+hi)*0.5f;}
+  return mid_in*_powf(2.0f,clampf(stop,-120.0f,120.0f));
 }
-__DEVICE__ float3 fns_forward_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend){
-  return make_float3(
-    fns_forward_characteristic(rgb.x,mid_in,mid_out,below,above,blend),
-    fns_forward_characteristic(rgb.y,mid_in,mid_out,below,above,blend),
-    fns_forward_characteristic(rgb.z,mid_in,mid_out,below,above,blend));
+__DEVICE__ float3 fns_forward_rgb(float3 rgb){return make_float3(fns_forward_characteristic(rgb.x,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND),fns_forward_characteristic(rgb.y,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND),fns_forward_characteristic(rgb.z,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND));}
+__DEVICE__ float3 fns_inverse_rgb(float3 rgb){return make_float3(fns_inverse_characteristic(rgb.x,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND),fns_inverse_characteristic(rgb.y,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND),fns_inverse_characteristic(rgb.z,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND));}
+__DEVICE__ float3 fns_apply_printer_lights(float3 rgb,float pr,float pg,float pb){return rgb*make_float3(fns_printer_gain(pr),fns_printer_gain(pg),fns_printer_gain(pb));}
+
+// ---- Keystone tone controls ----
+// Monotonic chromaticity-preserving black-point/toe control.
+// 0.0 and 18% are fixed points. The rational toe is monotonic for every
+// positive shape value, and a single XYZ scale preserves channel ratios.
+__DEVICE__ float ks_black_toe_y(float y,float amount){
+  if(y<=0.0f||_fabs(amount)<=1.0e-8f)return y;
+  const float pivot=0.18f;
+  if(y>=pivot)return y;
+  float t=clampf(y/pivot,0.0f,1.0f);
+  float shape=_powf(2.0f,-40.0f*clampf(amount,-0.05f,0.05f));
+  float den=shape+(1.0f-shape)*t;
+  float mapped=t/_fmaxf(den,1.0e-8f);
+  return pivot*mapped;
 }
-__DEVICE__ float3 fns_apply_printer_lights(float3 rgb,float pr,float pg,float pb){
-  float3 gains=make_float3(fns_printer_gain(pr),fns_printer_gain(pg),fns_printer_gain(pb));
-  return rgb*gains;
+__DEVICE__ float3 apply_soft_black_point_xyz(float3 xyz,float p_bp){
+  if(_fabs(p_bp)<=1.0e-8f||xyz.y<=1.0e-10f)return xyz;
+  float y2=ks_black_toe_y(xyz.y,p_bp);
+  float scale=y2/xyz.y;
+  scale=clampf(scale,0.25f,4.0f);
+  return xyz*make_float3(scale,scale,scale);
 }
-__DEVICE__ float3 fns_inverse_rgb(float3 rgb,float mid_in,float mid_out,float below,float above,float blend){
-  return make_float3(
-    fns_inverse_characteristic(rgb.x,mid_in,mid_out,below,above,blend),
-    fns_inverse_characteristic(rgb.y,mid_in,mid_out,below,above,blend),
-    fns_inverse_characteristic(rgb.z,mid_in,mid_out,below,above,blend));
+__DEVICE__ float ks_rolling_contrast(float x,float contrast_value,float pivot){
+  if(x<=0.0f||x>=1.0f)return x;
+  if(x<=pivot)return _powf(x/pivot,contrast_value)*pivot;
+  float inv=1.0f-x,inv_pivot=1.0f-pivot;return 1.0f-_powf(inv/inv_pivot,contrast_value)*inv_pivot;
 }
-
-// Catastrophic-only scene-domain ceiling. Values within +/-1e8 are untouched;
-// beyond that, RGB is uniformly scaled to preserve hue and channel ratios.
-__DEVICE__ float3 technical_scene_ceiling_guard(float3 rgb){
-  float m=_fmaxf(_fabs(rgb.x),_fmaxf(_fabs(rgb.y),_fabs(rgb.z)));
-  if(m<=1.0e8f)return rgb;
-  float k=1.0e8f/m;
-  return rgb*make_float3(k,k,k);
-}
-
-// ---- Primera Black Point ----
-// Exact Primera v0.6.0 soft-black-point primitive and call semantics.
-// Slider:
-//   Black Point: -0.05 .. +0.05, step 0.0001
-//
-// Primera runs this in linear RGB immediately after Exposure.
-// Keystone is fixed to AWG3, so the operator is applied independently to
-// scene-linear AWG3 R/G/B before Film Negative Space / Printer Lights.
-
-__DEVICE__ float soft_black_point(float x,float bp,float knee){
-  if(x<=0.0f)return x;
-  float corrected=x-bp;
-  if(corrected>=knee)return corrected;
-  return knee*_expf(corrected/knee-1.0f);
-}
-
-__DEVICE__ float3 apply_primera_black_point_xyz(float3 xyz,float p_bp){
-  if(_fabs(p_bp)<=1.0e-8f)return xyz;
-
-  float3 rgb=xyz_to_awg3(xyz);
-  float knee=0.005f;
-  float bp=-p_bp;
-
-  rgb=make_float3(
-    soft_black_point(rgb.x,bp,knee),
-    soft_black_point(rgb.y,bp,knee),
-    soft_black_point(rgb.z,bp,knee));
-
-  return awg3_to_xyz(rgb);
-}
-
-// ============================================================================
-// Primera rolling contrast - exact contrast math at Primera default Pivot = 0
-// ============================================================================
-//
-// Primera applies contrast independently to encoded RGB channels. Keystone is
-// fixed to AWG3 / LogC3 EI800, so this is equivalent to Primera with:
-//   Transfer Function = ARRI LogC3
-//   Pivot = 0.0
-//
-// The per-channel encoded-domain operation is intentionally preserved. This is
-// why the contrast adds colorfulness / saturation and separation as contrast rises.
-//
-// Exact Primera rolling-contrast equation:
-__DEVICE__ float primera_rolling_contrast(float x,float contrast,float pivot){
-  if(x<=0.0f)return x;
-  if(x>=1.0f)return x;
-  if(x<=pivot){
-    return _powf(x/pivot,contrast)*pivot;
-  }else{
-    float inv=1.0f-x;
-    float inv_pivot=1.0f-pivot;
-    return 1.0f-_powf(inv/inv_pivot,contrast)*inv_pivot;
-  }
-}
-
-__DEVICE__ float3 apply_primera_contrast_xyz(float3 xyz,float contrast){
-  float con=clampf(contrast,0.5f,2.0f);
-  if(_fabs(con-1.0f)<=1.0e-8f)return xyz;
-
-  float3 lin=xyz_to_awg3(xyz);
-  float3 enc=logc3_encode_ei800(lin);
-
-  // Primera default pivot for LogC3: encode(0.18) + 0.0 pivot offset.
-  float pivot=logc3_encode_ei800_scalar(0.18f);
-  pivot=_fmaxf(0.01f,_fminf(pivot,0.99f));
-
-  enc=make_float3(
-    primera_rolling_contrast(enc.x,con,pivot),
-    primera_rolling_contrast(enc.y,con,pivot),
-    primera_rolling_contrast(enc.z,con,pivot));
-
+__DEVICE__ float3 apply_logc3_contrast_xyz(float3 xyz,float contrast_value){
+  float con=clampf(contrast_value,0.5f,2.0f);if(_fabs(con-1.0f)<=1.0e-8f)return xyz;
+  float3 lin=xyz_to_awg3(xyz),enc=logc3_encode_ei800(lin);float pivot=clampf(logc3_encode_ei800_scalar(0.18f),0.01f,0.99f);
+  enc=make_float3(ks_rolling_contrast(enc.x,con,pivot),ks_rolling_contrast(enc.y,con,pivot),ks_rolling_contrast(enc.z,con,pivot));
   return awg3_to_xyz(logc3_decode_ei800(enc));
 }
-
-// Shadows/Highlights are selected from scene luminance instead of per-channel code values.
-// This makes the controls behave like broad HDR/log tonal zones: the qualification is
-// color-independent, middle gray stays anchored, and the result cannot create channel hue shifts.
 __DEVICE__ float3 keystone_hybrid_zone_masks(float Y){
   float ev=Y>1.0e-10f?_log2f(Y/0.18f):-20.0f;
-
-  // Broad, smooth zones with a clean midtone gap around 18% gray. The fifth-order
-  // transitions avoid a visible boundary while keeping the control much more local than
-  // the former whole-half encoded response.
-  float sw=1.0f-smootherstep(-2.60f,-0.10f,ev);
-  float hw=smootherstep(0.10f,2.60f,ev);
-
-  // Do not force chromatic noise/invalid near-black values harder simply because they sit
-  // below the shadow threshold. This only fades the final fraction near scene black.
-  float black_gate=smootherstep(-7.0f,-5.0f,ev);
-  sw*=black_gate;
-
+  float sw=1.0f-smootherstep(-2.60f,-0.10f,ev);float hw=smootherstep(0.10f,2.60f,ev);sw*=smootherstep(-7.0f,-5.0f,ev);
   return make_float3(clampf(sw,0.0f,1.0f),0.0f,clampf(hw,0.0f,1.0f));
 }
-
 __DEVICE__ float3 apply_keystone_hybrid_zones_xyz(float3 xyz,float shadows_value,float highlights_value){
-  if(_fabs(shadows_value)<=1.0e-7f&&_fabs(highlights_value)<=1.0e-7f)return xyz;
-  float Y=xyz.y;
-  if(Y<=0.0f)return xyz;
-
-  float3 masks=keystone_hybrid_zone_masks(Y);
-  float stops=shadows_value*masks.x+highlights_value*masks.z;
-  float gain=_powf(2.0f,stops);
-  return xyz*make_float3(gain,gain,gain);
+  if(_fabs(shadows_value)<=1.0e-7f&&_fabs(highlights_value)<=1.0e-7f)return xyz;if(xyz.y<=0.0f)return xyz;
+  float3 masks=keystone_hybrid_zone_masks(xyz.y);float stops=shadows_value*masks.x+highlights_value*masks.z;float gain=_powf(2.0f,stops);return xyz*make_float3(gain,gain,gain);
 }
 __DEVICE__ float scene_ev_from_y(float Y,float mid){if(Y<=1.0e-10f)return -20.0f;return _log2f(Y/_fmaxf(mid,1.0e-8f));}
 __DEVICE__ float3 apply_auto_rolloff_xyz(float3 xyz,float mid,float amount){
-  // Monotonic scene-luminance shoulder with a true identity limit at amount=0.
-  // The old 0.50+ offset made the first slider increment far too strong.
-  float a=clampf(amount,0.0f,2.0f);
-  if(a<=1.0e-9f||xyz.y<=1.0e-10f)return xyz;
-
-  float ev=scene_ev_from_y(xyz.y,mid);
-  const float knee_ev=2.50f;
-  if(ev<=knee_ev)return xyz;
-
-  float d=ev-knee_ev;
-  float strength=3.0f*a; // exactly approaches zero with the slider
-  if(strength<=1.0e-8f)return xyz;
-
-  // ln(1+s*d)/s, expressed with log2 for conservative DCTL compatibility.
-  float out_d=_log2f(1.0f+strength*d)*LN2/strength;
-  float out_ev=knee_ev+out_d;
-  float Yout=mid*_powf(2.0f,out_ev);
-  float k=Yout/xyz.y;
-  return xyz*make_float3(k,k,k);
+  float a=clampf(amount,0.0f,2.0f);if(a<=1.0e-9f||xyz.y<=1.0e-10f)return xyz;
+  float ev=scene_ev_from_y(xyz.y,mid),knee_ev=2.50f;if(ev<=knee_ev)return xyz;
+  float d=ev-knee_ev,strength=3.0f*a;if(strength<=1.0e-8f)return xyz;
+  float out_d=_log2f(1.0f+strength*d)*LN2/strength;float Yout=mid*_powf(2.0f,knee_ev+out_d);float k=Yout/xyz.y;return xyz*make_float3(k,k,k);
 }
 
-// ---- Primera Pos Saturation ----
-// This replaces Keystone's former Oklab global saturation slider.
-//
-// Primera applies positive saturation in encoded RGB:
-//   HSV saturation *= 2^amount
-//   HSV saturation is capped at 1
-//   operation is skipped if any encoded RGB channel is negative
-//
-// Keystone is fixed to AWG3 / LogC3 EI800, so the current scene result is:
-//   XYZ -> AWG3 linear -> LogC3 -> Primera HSV Pos Sat -> LogC3 decode -> XYZ
-//
-// No luminance-preservation pass is applied. That matches Primera's default
-// Pos. Saturation behavior and intentionally allows the saturation operation
-// to contribute some density/colorfulness character.
+// ---- Density-look presets ----
+// Presets are expressed directly as shadow/highlight optical-density offsets.
+// Manual split controls are additive trims on top. Preset 0 is Custom/zero.
+__DEVICE__ float3 ks_split_preset_shadow(int p){
+  if(p==1)return make_float3(0.08863f,-0.02323f,-0.06541f);
+  if(p==2)return make_float3(-0.06268f,0.02009f,0.04259f);
+  if(p==3)return make_float3(0.08554f,-0.04309f,-0.04245f);
+  if(p==4)return make_float3(-0.06790f,0.01777f,0.05013f);
+  if(p==5)return make_float3(-0.03298f,-0.02604f,0.05902f);
+  if(p==6)return make_float3(0.09741f,-0.05113f,-0.04628f);
+  if(p==7)return make_float3(-0.04248f,0.01536f,0.02713f);
+  if(p==8)return make_float3(0.05141f,-0.01503f,-0.03638f);
+  if(p==9)return make_float3(0.10161f,-0.05104f,-0.05057f);
+  if(p==10)return make_float3(0.10098f,-0.02661f,-0.07437f);
+  if(p==11)return make_float3(-0.03306f,0.01196f,0.02110f);
+  if(p==12)return make_float3(0.04640f,-0.01395f,-0.03245f);
+  if(p==13)return make_float3(0.02222f,-0.00467f,-0.01755f);
+  if(p==14)return make_float3(0.07062f,-0.01234f,-0.05828f);
+  if(p==15)return make_float3(0.05273f,-0.03059f,-0.02213f);
+  return make_float3(0.0f,0.0f,0.0f);
+}
+__DEVICE__ float3 ks_split_preset_high(int p){
+  if(p==1)return make_float3(-0.06768f,0.01133f,0.05634f);
+  if(p==2)return make_float3(0.08370f,-0.02188f,-0.06182f);
+  if(p==3)return make_float3(-0.07754f,0.01650f,0.06104f);
+  if(p==4)return make_float3(0.08269f,-0.03647f,-0.04622f);
+  if(p==5)return make_float3(-0.05734f,0.00758f,0.04977f);
+  if(p==6)return make_float3(-0.08350f,0.02334f,0.06017f);
+  if(p==7)return make_float3(-0.05988f,0.00788f,0.05200f);
+  if(p==8)return make_float3(0.03984f,-0.01563f,-0.02421f);
+  if(p==9)return make_float3(-0.09998f,0.02979f,0.07019f);
+  if(p==10)return make_float3(0.08093f,-0.02389f,-0.05705f);
+  if(p==11)return make_float3(-0.07740f,0.01721f,0.06019f);
+  if(p==12)return make_float3(0.02638f,-0.00909f,-0.01729f);
+  if(p==13)return make_float3(-0.09075f,0.01479f,0.07596f);
+  if(p==14)return make_float3(0.00313f,0.01911f,-0.02224f);
+  if(p==15)return make_float3(-0.06992f,0.02238f,0.04754f);
+  return make_float3(0.0f,0.0f,0.0f);
+}
+
+// ---- Analytic H&D + gray-balanced profiles ----
+__DEVICE__ float ks_softplus(float z){float az=_fabs(z);return _fmaxf(z,0.0f)+_logf(1.0f+_expf(-az));}
+__DEVICE__ float ks_hd_curve(float logH,float Dmin,float Dmax,float gamma,float toe,float shoulder,float speed){
+  float t=_fmaxf(toe,0.05f),s=_fmaxf(shoulder,0.05f);float d1=Dmin+(gamma/t)*ks_softplus(t*(logH-speed));return Dmax-(1.0f/s)*ks_softplus(s*(Dmax-d1));
+}
+__DEVICE__ float ks_profile_neg_gamma(int p){if(p==KS_PROFILE_LATITUDE)return 0.58f;if(p==KS_PROFILE_PUNCH)return 0.69f;if(p==KS_PROFILE_CHROME)return 0.70f;return 0.62f;}
+__DEVICE__ float ks_profile_neg_shoulder(int p){if(p==KS_PROFILE_LATITUDE)return 1.6f;if(p==KS_PROFILE_PUNCH)return 2.6f;if(p==KS_PROFILE_CHROME)return 3.2f;return 2.5f;}
+__DEVICE__ float ks_profile_neg_toe(int p){if(p==KS_PROFILE_LATITUDE)return 2.0f;if(p==KS_PROFILE_PUNCH)return 2.8f;if(p==KS_PROFILE_CHROME)return 3.0f;return 2.5f;}
+__DEVICE__ float ks_profile_neg_dmax(int p){if(p==KS_PROFILE_LATITUDE)return 3.10f;return 2.90f;}
+__DEVICE__ float ks_profile_neg_speed(int p){if(p==KS_PROFILE_LATITUDE)return -1.8f;return -1.5f;}
+__DEVICE__ float ks_profile_prn_gamma(int p){if(p==KS_PROFILE_LATITUDE)return 2.65f;if(p==KS_PROFILE_PUNCH)return 2.70f;if(p==KS_PROFILE_CHROME)return 2.78f;return 2.60f;}
+__DEVICE__ float ks_profile_prn_shoulder(int p){if(p==KS_PROFILE_LATITUDE)return 1.9f;if(p==KS_PROFILE_PUNCH)return 2.6f;if(p==KS_PROFILE_CHROME)return 3.4f;return 2.2f;}
+__DEVICE__ float ks_profile_prn_toe(int p){if(p==KS_PROFILE_LATITUDE)return 3.0f;if(p==KS_PROFILE_PUNCH)return 5.0f;if(p==KS_PROFILE_CHROME)return 6.0f;return 3.5f;}
+__DEVICE__ float ks_profile_prn_dmax(int p){if(p==KS_PROFILE_PUNCH)return 3.40f;if(p==KS_PROFILE_CHROME)return 3.60f;return 3.30f;}
+__DEVICE__ float ks_profile_prn_speed(int p){if(p==KS_PROFILE_CHROME)return -1.65f;return -1.75f;}
+
+__DEVICE__ float ks_neg_density_profile(float logH,int p){return ks_hd_curve(logH,KS_NEG_DMIN,ks_profile_neg_dmax(p),ks_profile_neg_gamma(p),ks_profile_neg_toe(p),ks_profile_neg_shoulder(p),ks_profile_neg_speed(p));}
+__DEVICE__ float ks_print_density_profile(float logH,int p,float masterPts){return ks_hd_curve(logH+masterPts*KS_PRINTER_PT,KS_PRN_DMIN,ks_profile_prn_dmax(p),ks_profile_prn_gamma(p),ks_profile_prn_toe(p),ks_profile_prn_shoulder(p),ks_profile_prn_speed(p));}
+__DEVICE__ float ks_neg_formed_density_profile(float logH,int p){return _fmaxf(ks_neg_density_profile(logH,p)-KS_NEG_DMIN,0.0f);}
+
+// ---- Non-spatial DIR development feedback ----
+// DIR uses formed density above the negative base/fog minimum for inhibitor
+// generation while retaining full optical density for the print chain.
+// Matrix convention is donor row -> receiver column.
+__DEVICE__ float3 ks_dir_correction(float3 formed_density,float amount){
+  float a=clampf(amount,0.0f,1.0f);
+  float corrR=formed_density.x*0.341f+formed_density.y*0.154f+formed_density.z*0.171f;
+  float corrG=formed_density.x*0.355f+formed_density.y*0.324f+formed_density.z*0.225f;
+  float corrB=formed_density.x*0.305f+formed_density.y*0.358f+formed_density.z*0.273f;
+  return make_float3(corrR*a,corrG*a,corrB*a);
+}
+
+// Continuous analytic pre-correction keeps the supplied negative characteristic
+// stable after DIR feedback. The scalar inverse is solved as
+// h = h0 + S*formed(h).
+__DEVICE__ float ks_dir_precorrected_density(float corrected_logH,float column_sum,int profile){
+  if(column_sum<=1.0e-8f)return ks_neg_density_profile(corrected_logH,profile);
+  float h=corrected_logH;
+  for(int i=0;i<24;i++)h=corrected_logH+column_sum*ks_neg_formed_density_profile(h,profile);
+  return ks_neg_density_profile(h,profile);
+}
+__DEVICE__ float3 ks_negative_with_dir(float3 logH,float amount,int profile){
+  float a=clampf(amount,0.0f,1.0f);
+  float3 initial_full=make_float3(ks_neg_density_profile(logH.x,profile),ks_neg_density_profile(logH.y,profile),ks_neg_density_profile(logH.z,profile));
+  if(a<=1.0e-8f)return initial_full;
+  float3 initial_formed=make_float3(_fmaxf(initial_full.x-KS_NEG_DMIN,0.0f),_fmaxf(initial_full.y-KS_NEG_DMIN,0.0f),_fmaxf(initial_full.z-KS_NEG_DMIN,0.0f));
+  float3 correction=ks_dir_correction(initial_formed,a);
+  float3 h0=logH-correction;
+  float sumR=(0.341f+0.154f+0.171f)*a;
+  float sumG=(0.355f+0.324f+0.225f)*a;
+  float sumB=(0.305f+0.358f+0.273f)*a;
+  return make_float3(ks_dir_precorrected_density(h0.x,sumR,profile),ks_dir_precorrected_density(h0.y,sumG,profile),ks_dir_precorrected_density(h0.z,sumB,profile));
+}
+__DEVICE__ float3 apply_film_response_raw(float3 rgb,float response,float dirA,int profile,float masterPts,float cCC,float mCC,float yCC){
+  float a=clampf(response,0.0f,1.0f);if(a<=1.0e-8f)return rgb;
+  float3 logH=make_float3(
+    _log2f(_fmaxf(rgb.x,KS_LIN_TINY)/KS_18_GRAY)*KS_LOG10_2,
+    _log2f(_fmaxf(rgb.y,KS_LIN_TINY)/KS_18_GRAY)*KS_LOG10_2,
+    _log2f(_fmaxf(rgb.z,KS_LIN_TINY)/KS_18_GRAY)*KS_LOG10_2);
+  float3 dneg=ks_negative_with_dir(logH,dirA,profile);
+  float3 dpr=make_float3(ks_print_density_profile(-dneg.x-cCC*0.01f,profile,masterPts),ks_print_density_profile(-dneg.y-mCC*0.01f,profile,masterPts),ks_print_density_profile(-dneg.z-yCC*0.01f,profile,masterPts));
+  float3 refH=make_float3(0.0f,0.0f,0.0f);
+  float3 dnegRef=ks_negative_with_dir(refH,dirA,profile);
+  float3 dprRef=make_float3(ks_print_density_profile(-dnegRef.x-cCC*0.01f,profile,masterPts),ks_print_density_profile(-dnegRef.y-mCC*0.01f,profile,masterPts),ks_print_density_profile(-dnegRef.z-yCC*0.01f,profile,masterPts));
+  float3 out=make_float3(KS_18_GRAY*_powf(10.0f,-(dpr.x-dprRef.x)),KS_18_GRAY*_powf(10.0f,-(dpr.y-dprRef.y)),KS_18_GRAY*_powf(10.0f,-(dpr.z-dprRef.z)));
+  return mix3(rgb,out,a);
+}
+__DEVICE__ float3 apply_film_response(float3 rgb,float response,float dirA,int profile,float masterPts,float cCC,float mCC,float yCC){
+  float gate=ks_density_gate(rgb);
+  if(gate<=1.0e-7f)return rgb;
+  float3 candidate=apply_film_response_raw(rgb,response,dirA,profile,masterPts,cCC,mCC,yCC);
+  return rgb+(candidate-rgb)*make_float3(gate,gate,gate);
+}
 
 
+// ---- Color: density dye coupling + positive HSV saturation ----
+__DEVICE__ float density10(float lin){return -_log2f(_fmaxf(lin,1.0e-6f))*KS_LOG10_2;}
+__DEVICE__ float density_soft_cap(float d,float cap){if(cap<=0.0f)return d;return cap-(1.0f/8.0f)*ks_softplus(8.0f*(cap-d));}
+__DEVICE__ float3 apply_dye_coupling_raw(float3 rgb,float coupling){
+  float c=clampf(coupling,0.0f,1.5f);if(c<=1.0e-8f)return rgb;
+  float DR=density10(rgb.x),DG=density10(rgb.y),DB=density10(rgb.z),Dbar=(DR+DG+DB)*(1.0f/3.0f);
+  float devR=DR-Dbar,devG=DG-Dbar,devB=DB-Dbar;
+  float cR=devR-(0.28f*c*devG+0.06f*c*devB);
+  float cG=devG-(0.08f*c*devR+0.30f*c*devB);
+  float cB=devB-(0.04f*c*devR+0.22f*c*devG);
+  float DpR=density_soft_cap(Dbar+cR,KS_DYE_KNEE),DpG=density_soft_cap(Dbar+cG,KS_DYE_KNEE),DpB=density_soft_cap(Dbar+cB,KS_DYE_KNEE);
+  return make_float3(_powf(10.0f,-DpR),_powf(10.0f,-DpG),_powf(10.0f,-DpB));
+}
+__DEVICE__ float3 apply_dye_coupling(float3 rgb,float coupling){
+  float a=clampf(coupling,0.0f,1.0f);
+  if(a<=1.0e-7f)return rgb;
+  float gate=ks_density_gate(rgb)*ks_neutral_activity(rgb);
+  if(gate<=1.0e-7f)return rgb;
+  float shaped=ks_soft_limit01(a);
+  float3 candidate=apply_dye_coupling_raw(rgb,shaped);
+  return rgb+(candidate-rgb)*make_float3(gate,gate,gate);
+}
 __DEVICE__ float3 ks_rgb_to_hsv(float3 rgb){
-  float r=rgb.x,g=rgb.y,b=rgb.z;
-  float cmax=_fmaxf(r,_fmaxf(g,b));
-  float cmin=_fminf(r,_fminf(g,b));
-  float delta=cmax-cmin;
-
-  float h=0.0f;
-  if(delta>0.0f){
-    if(cmax==r)h=(g-b)/delta;
-    else if(cmax==g)h=(b-r)/delta+2.0f;
-    else h=(r-g)/delta+4.0f;
-    if(h<0.0f)h+=6.0f;
-    h/=6.0f;
-  }
-
-  float s=(cmax>0.0f)?delta/cmax:0.0f;
-  return make_float3(h,s,cmax);
+  float r=rgb.x,g=rgb.y,b=rgb.z;float cmax=_fmaxf(r,_fmaxf(g,b));float cmin=_fminf(r,_fminf(g,b));float delta=cmax-cmin;float h=0.0f;
+  if(delta>0.0f){if(cmax==r)h=(g-b)/delta;else if(cmax==g)h=(b-r)/delta+2.0f;else h=(r-g)/delta+4.0f;if(h<0.0f)h+=6.0f;h/=6.0f;}
+  float sat=(cmax>0.0f)?delta/cmax:0.0f;return make_float3(h,sat,cmax);
 }
-
 __DEVICE__ float3 ks_hsv_to_rgb(float3 hsv){
-  float h=hsv.x*6.0f;
-  float s=hsv.y;
-  float v=hsv.z;
-
-  float c=v*s;
-  float x=c*(1.0f-_fabs(h-2.0f*_floorf(h*0.5f)-1.0f));
-  float m=v-c;
-
-  float r,g,b;
-  if(h<1.0f){r=c;g=x;b=0.0f;}
-  else if(h<2.0f){r=x;g=c;b=0.0f;}
-  else if(h<3.0f){r=0.0f;g=c;b=x;}
-  else if(h<4.0f){r=0.0f;g=x;b=c;}
-  else if(h<5.0f){r=x;g=0.0f;b=c;}
-  else{r=c;g=0.0f;b=x;}
-
+  float h=hsv.x*6.0f,s=hsv.y,v=hsv.z;float c=v*s;float x=c*(1.0f-_fabs(h-2.0f*_floorf(h*0.5f)-1.0f));float m=v-c;float r,g,b;
+  if(h<1.0f){r=c;g=x;b=0.0f;}else if(h<2.0f){r=x;g=c;b=0.0f;}else if(h<3.0f){r=0.0f;g=c;b=x;}else if(h<4.0f){r=0.0f;g=x;b=c;}else if(h<5.0f){r=x;g=0.0f;b=c;}else{r=c;g=0.0f;b=x;}
   return make_float3(r+m,g+m,b+m);
 }
-
-__DEVICE__ float3 apply_primera_pos_sat_xyz(float3 xyz,float amount){
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-8f)return xyz;
-
-  float3 lin=xyz_to_awg3(xyz);
-  float3 enc=logc3_encode_ei800(lin);
-
-  // Match Primera: positive saturation is only applied when all encoded
-  // channels are non-negative.
-  if(enc.x<0.0f||enc.y<0.0f||enc.z<0.0f)return xyz;
-
-  float3 hsv=ks_rgb_to_hsv(enc);
-  hsv.y*=_powf(2.0f,a);
-  hsv.y=_fminf(hsv.y,1.0f);
-
-  float3 sat_enc=ks_hsv_to_rgb(hsv);
-  float3 sat_lin=logc3_decode_ei800(sat_enc);
-  return awg3_to_xyz(sat_lin);
+__DEVICE__ float3 apply_pos_sat_logc3(float3 linear,float amount){
+  float a=clampf(amount,0.0f,1.0f);if(a<=1.0e-8f)return linear;
+  float3 enc=logc3_encode_ei800(linear);
+  if(enc.x<0.0f||enc.y<0.0f||enc.z<0.0f)return linear;
+  float3 hsv=ks_rgb_to_hsv(enc);hsv.y*=_powf(2.0f,a);hsv.y=_fminf(hsv.y,1.0f);
+  return logc3_decode_ei800(ks_hsv_to_rgb(hsv));
 }
 
-// ---- Oklab Positive Saturation ----
-// This is a second, separate positive-only saturation control so the Primera
-// Pos Sat behavior can be compared directly with a perceptual Oklab version.
-//
-// Behavior:
-//   chroma_out = chroma_in * 2^amount
-//
-// with:
-//   - Oklab L kept fixed
-//   - hue angle kept fixed
-//   - resulting XYZ rescaled to preserve original scene Y
-//
-// This remains more hue-stable than HSV Pos Sat, but now adds a modest
-// density response so it can keep some of the richer Primera feel.
-__DEVICE__ float3 apply_oklab_pos_sat_xyz(float3 xyz,float amount){
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-8f)return xyz;
-  if(xyz.y<=1.0e-20f)return xyz;
-
-  float3 lab=xyz_to_oklab(xyz);
-  float Cin=_sqrtf(lab.y*lab.y+lab.z*lab.z);
-  if(Cin<=1.0e-10f)return xyz;
-
-  // Perceptual positive-only chroma increase.
-  float scale=_powf(2.0f,a);
-  float3 out_lab=make_float3(lab.x,lab.y*scale,lab.z*scale);
-  float3 out_xyz=oklab_to_xyz_preserve_y_safe(out_lab,xyz.y);
-
-  // Add a small density response so the Oklab control keeps some of the richer
-  // feel of Primera Pos Sat instead of remaining perfectly clean/lightness-only.
-  //
-  // Behavior:
-  // - tied to actual relative chroma gain
-  // - fades in only once the source already has meaningful chroma
-  // - max density response is intentionally modest
-  float Cout=_sqrtf(out_lab.y*out_lab.y+out_lab.z*out_lab.z);
-  float rel_gain=0.0f;
-  if(Cin>1.0e-8f)rel_gain=clampf(Cout/Cin-1.0f,0.0f,1.0f);
-
-  float chroma_weight=smootherstep(0.015f,0.120f,Cin);
-  float density=1.0f-0.16f*a*rel_gain*chroma_weight;
-  density=clampf(density,0.84f,1.0f);
-
-  return out_xyz*make_float3(density,density,density);
+// ---- Density-domain split tone ----
+__DEVICE__ float3 apply_split_tone_raw(float3 rgb,float shR,float shG,float shB,float hiR,float hiG,float hiB,float pivot,float width){
+  if(_fabs(shR)+_fabs(shG)+_fabs(shB)+_fabs(hiR)+_fabs(hiG)+_fabs(hiB)<=1.0e-8f)return rgb;
+  float DR=density10(rgb.x),DG=density10(rgb.y),DB=density10(rgb.z),Dbar=(DR+DG+DB)*(1.0f/3.0f);
+  float pivotD=KS_GRAY_D-clampf(pivot,-3.0f,3.0f)*KS_LOG10_2;
+  float halfW=0.25f+1.5f*clampf(width,0.0f,1.0f);
+  float x=(Dbar-pivotD)/halfW;
+  float wS=smooth01(x),wH=smooth01(-x);
+  return make_float3(
+    _powf(10.0f,-(DR+wS*shR+wH*hiR)),
+    _powf(10.0f,-(DG+wS*shG+wH*hiG)),
+    _powf(10.0f,-(DB+wS*shB+wH*hiB)));
+}
+__DEVICE__ float3 apply_split_tone(float3 rgb,float shR,float shG,float shB,float hiR,float hiG,float hiB,float pivot,float width){
+  float gate=ks_density_gate(rgb);
+  if(gate<=1.0e-7f)return rgb;
+  float3 candidate=apply_split_tone_raw(rgb,shR,shG,shB,hiR,hiG,hiB,pivot,width);
+  return rgb+(candidate-rgb)*make_float3(gate,gate,gate);
 }
 
-
-// ---- Internal skin qualifier for Output cleanup protection ----
-// User-facing Skin controls and the skin-shaping pass have been removed.
-// This qualifier remains internal only so Out / White and Out / Black can
-// continue protecting skin automatically.
-
+// ---- Keystone output cleanup + automatic skin protection ----
 #define KS_SKIN_CENTER_RN 0.4278f
 #define KS_SKIN_CENTER_GN 0.3083f
-
-__DEVICE__ float2 ks_skin_rg(float3 xyz){
-  float3 rgb=xyz_to_awg3(xyz);
-  float r=_fmaxf(rgb.x,0.0f);
-  float g=_fmaxf(rgb.y,0.0f);
-  float b=_fmaxf(rgb.z,0.0f);
-  float sum=r+g+b;
-  if(sum<=1.0e-8f)return make_float2(KS_SKIN_CENTER_RN,KS_SKIN_CENTER_GN);
-  return make_float2(r/sum,g/sum);
-}
-
+__DEVICE__ float2 ks_skin_rg(float3 xyz){float3 rgb=xyz_to_awg3(xyz);float r=_fmaxf(rgb.x,0.0f),g=_fmaxf(rgb.y,0.0f),b=_fmaxf(rgb.z,0.0f),sum=r+g+b;if(sum<=1.0e-8f)return make_float2(KS_SKIN_CENTER_RN,KS_SKIN_CENTER_GN);return make_float2(r/sum,g/sum);}
 __DEVICE__ float ks_skin_mask_rg(float2 rg,float3 xyz,float range_ctrl){
-  float rn=rg.x;
-  float gn=rg.y;
-
-  float range=clampf(range_ctrl,0.25f,2.0f);
-  float broad=range-1.0f;
-
-  float dr=rn-KS_SKIN_CENTER_RN;
-  float dg=gn-KS_SKIN_CENTER_GN;
-
-  // Primera-style center around normalized skin chromaticity.
-  float warm=dr-0.51372f*(dg/(-0.85796f));
-  float tint=dg/(-0.85796f);
-
-  float warm_half=0.018f+0.020f*range;
-  float tint_half=0.020f+0.022f*range;
-  float q=(warm*warm)/(warm_half*warm_half)+(tint*tint)/(tint_half*tint_half);
+  float rn=rg.x,gn=rg.y,range=clampf(range_ctrl,0.25f,2.0f),broad=range-1.0f;
+  float dr=rn-KS_SKIN_CENTER_RN,dg=gn-KS_SKIN_CENTER_GN;
+  float warm=dr-0.51372f*(dg/(-0.85796f)),tintv=dg/(-0.85796f);
+  float warm_half=0.018f+0.020f*range,tint_half=0.020f+0.022f*range;
+  float q=(warm*warm)/(warm_half*warm_half)+(tintv*tintv)/(tint_half*tint_half);
   float rg_gate=1.0f-smootherstep(1.0f,2.10f+0.40f*range,q);
-
-  float bn=1.0f-rn-gn;
-  float rb=rn-bn;
-  float rb_gate=
-    smootherstep(0.020f,0.070f,rb)*
-    (1.0f-smootherstep(0.33f+0.03f*broad,0.43f+0.04f*broad,rb));
-
-  float g_gate=
-    smootherstep(0.22f-0.02f*broad,0.27f-0.01f*broad,gn)*
-    (1.0f-smootherstep(0.36f+0.02f*broad,0.43f+0.03f*broad,gn));
-
+  float bn=1.0f-rn-gn,rb=rn-bn;
+  float rb_gate=smootherstep(0.020f,0.070f,rb)*(1.0f-smootherstep(0.33f+0.03f*broad,0.43f+0.04f*broad,rb));
+  float g_gate=smootherstep(0.22f-0.02f*broad,0.27f-0.01f*broad,gn)*(1.0f-smootherstep(0.36f+0.02f*broad,0.43f+0.03f*broad,gn));
   float rlead_gate=smootherstep(-0.005f,0.025f,rn-gn);
-
-  float3 lab=xyz_to_oklab(xyz);
-  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
-  float Labs=_fmaxf(_fabs(lab.x),1.0e-6f);
-  float relC=C/Labs;
-
-  float chroma_gate=
-    smootherstep(0.025f,0.060f,relC)*
-    (1.0f-smootherstep(0.34f,0.58f,relC));
-
-  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
-  float luma_gate=
-    smootherstep(-5.0f,-2.1f,ev)*
-    (1.0f-smootherstep(3.0f,5.5f,ev));
-
+  float3 lab=xyz_to_oklab(xyz);float C=_sqrtf(lab.y*lab.y+lab.z*lab.z),relC=C/_fmaxf(_fabs(lab.x),1.0e-6f);
+  float chroma_gate=smootherstep(0.025f,0.060f,relC)*(1.0f-smootherstep(0.34f,0.58f,relC));
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);float luma_gate=smootherstep(-5.0f,-2.1f,ev)*(1.0f-smootherstep(3.0f,5.5f,ev));
   return clampf(rg_gate*rb_gate*g_gate*rlead_gate*chroma_gate*luma_gate,0.0f,1.0f);
 }
-
-// Output cleanup should not strip useful color out of skin. This helper reuses
-// Keystone's skin-qualification engine and attenuates cleanup on confident skin.
-// Protection is automatic and does not require another UI control.
-//
-// A slightly broadened minimum range is used so protection still works even if
-// the creative Skin section is set very tight.
-__DEVICE__ float output_cleanup_skin_allow(float3 xyz){
-  float protect_range=1.0f;
-  float2 rg=ks_skin_rg(xyz);
-  float skin=ks_skin_mask_rg(rg,xyz,protect_range);
-
-  // Start easing off cleanup on weak skin candidates, then protect strongly on
-  // confident skin. Keep a small residual amount available so near-neutral,
-  // skin-adjacent pixels can still be cleaned if needed.
-  float protect=smootherstep(0.10f,0.55f,skin);
-  return 1.0f-0.85f*protect;
-}
-
-
-// White cleanup is intentionally NOT a look transform. It only reduces chroma
-// in bright, already-near-neutral colors while preserving scene Y. This is a
-// luminance-preserving white-clean operation: no palette matrix, hue rotation,
-// Technicolor crosstalk, or global saturation change is present. Saturated
-// highlights are protected by the relative-chroma gate.
+__DEVICE__ float output_cleanup_skin_allow(float3 xyz){float2 rg=ks_skin_rg(xyz);float skin=ks_skin_mask_rg(rg,xyz,1.0f);float protect=smootherstep(0.10f,0.55f,skin);return 1.0f-0.85f*protect;}
 __DEVICE__ float3 clean_neutral_highlights_xyz(float3 xyz,float amount){
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
-
-  float3 lab=xyz_to_oklab(xyz);
-  float L=lab.x;
-  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
-  if(C<=1.0e-20f)return xyz;
-
-  // Stronger real-world white selector. Begin engaging slightly below middle-gray
-  // and reach full tonal eligibility by +1 EV. This lets practical white objects
-  // become fully neutral instead of being limited by a half-strength brightness mask.
-  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
-  float white_gate=smootherstep(-0.50f,1.00f,ev);
-
-  // Full cleanup is allowed for mildly contaminated near-whites through relC .08.
-  // More colorful highlights roll off smoothly, with strong color protected by .30.
-  float relC=C/_fmaxf(_fabs(L),1.0e-6f);
-  float neutral_gate=1.0f-smootherstep(0.080f,0.300f,relC);
-
-  // Smoothstep slider response with exact 0, 0.5, and 1 reference points.
-  float a_eff=a*a*(3.0f-2.0f*a);
-  float skin_allow=output_cleanup_skin_allow(xyz);
-  float clean=clampf(a_eff*white_gate*neutral_gate*skin_allow,0.0f,1.0f);
-  if(clean<=1.0e-7f)return xyz;
-  lab.y*=1.0f-clean;
-  lab.z*=1.0f-clean;
-  return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
+  float a=clampf(amount,0.0f,1.0f);if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
+  float3 lab=xyz_to_oklab(xyz);float L=lab.x,C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(C<=1.0e-20f)return xyz;
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f),white_gate=smootherstep(-0.50f,1.00f,ev),relC=C/_fmaxf(_fabs(L),1.0e-6f),neutral_gate=1.0f-smootherstep(0.080f,0.300f,relC);
+  float a_eff=a*a*(3.0f-2.0f*a),clean=clampf(a_eff*white_gate*neutral_gate*output_cleanup_skin_allow(xyz),0.0f,1.0f);if(clean<=1.0e-7f)return xyz;
+  lab.y*=1.0f-clean;lab.z*=1.0f-clean;return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
 }
-
-// Black cleanup mirrors the white-clean idea at the opposite end of the scene
-// range. It only reduces chroma in deep, already-near-neutral shadows while
-// preserving scene Y. The L floor in the chroma ratio is intentional: without it,
-// tiny RGB contamination near black can look artificially "high saturation" and
-// prevent the selector from engaging.
 __DEVICE__ float3 clean_neutral_shadows_xyz(float3 xyz,float amount){
-  float a=clampf(amount,0.0f,1.0f);
-  if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
-
-  float3 lab=xyz_to_oklab(xyz);
-  float L=lab.x;
-  float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);
-  if(C<=1.0e-20f)return xyz;
-
-  // Stronger black selector. Deep shadows are fully eligible by -2 EV and the
-  // effect fades smoothly out through middle gray instead of stopping at -1 EV.
-  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f);
-  float black_gate=1.0f-smootherstep(-2.0f,0.0f,ev);
-
-  // Full cleanup is allowed for mildly contaminated near-blacks through relC .06.
-  // More colorful shadows are increasingly protected, reaching full protection by .30.
-  float relC=C/_fmaxf(_fabs(L),0.12f);
-  float neutral_gate=1.0f-smootherstep(0.060f,0.300f,relC);
-
-  float a_eff=a*a*(3.0f-2.0f*a);
-  float skin_allow=output_cleanup_skin_allow(xyz);
-  float clean=clampf(a_eff*black_gate*neutral_gate*skin_allow,0.0f,1.0f);
-  if(clean<=1.0e-7f)return xyz;
-  lab.y*=1.0f-clean;
-  lab.z*=1.0f-clean;
-  return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
+  float a=clampf(amount,0.0f,1.0f);if(a<=1.0e-7f||xyz.y<=1.0e-20f)return xyz;
+  float3 lab=xyz_to_oklab(xyz);float L=lab.x,C=_sqrtf(lab.y*lab.y+lab.z*lab.z);if(C<=1.0e-20f)return xyz;
+  float ev=_log2f(_fmaxf(xyz.y,1.0e-10f)/0.18f),black_gate=1.0f-smootherstep(-2.0f,0.0f,ev),relC=C/_fmaxf(_fabs(L),0.12f),neutral_gate=1.0f-smootherstep(0.060f,0.300f,relC);
+  float a_eff=a*a*(3.0f-2.0f*a),clean=clampf(a_eff*black_gate*neutral_gate*output_cleanup_skin_allow(xyz),0.0f,1.0f);if(clean<=1.0e-7f)return xyz;
+  lab.y*=1.0f-clean;lab.z*=1.0f-clean;return oklab_to_xyz_preserve_y_safe(lab,xyz.y);
 }
 
-// ---- Technical encode-domain guard ----
-// This is NOT creative gamut mapping. It only prevents pathological imaginary RGB
-// ratios produced by extreme combinations from exploding vendor log encoders.
-// Normal extended/negative values are preserved. For positive scene Y, channel
-// excursions are bounded only when they become catastrophic for downstream encoders; ordinary negative values remain extended.
-// Final transfer-aware safety gate. A scene-linear value that looks merely extended can
-// encode to a catastrophic negative number in some log curves. For positive scene Y,
-// reduce only chroma (toward the equal-RGB neutral at the same Y) when final encoded RGB
-// would fall below -1.0. Ordinary extended negatives remain untouched.
+// ---- Technical guards + ACES RGC (Keystone v1.13.1) ----
+__DEVICE__ float3 technical_scene_ceiling_guard(float3 rgb){float m=_fmaxf(_fabs(rgb.x),_fmaxf(_fabs(rgb.y),_fabs(rgb.z)));if(m<=1.0e8f)return rgb;float k=1.0e8f/m;return rgb*make_float3(k,k,k);}
 __DEVICE__ float3 technical_encoded_negative_guard(float3 rgb,float Y){
-  const float code_floor=-1.0f;
-  float3 enc=logc3_encode_ei800(rgb);
-  float mn=_fminf(enc.x,_fminf(enc.y,enc.z));
-  if(mn>=code_floor)return rgb;
-
-  if(Y>0.0f){
-    float3 neutral=make_float3(Y,Y,Y);
-    float3 delta=rgb-neutral;
-    float3 neutral_enc=logc3_encode_ei800(neutral);
-    float neutral_min=_fminf(neutral_enc.x,_fminf(neutral_enc.y,neutral_enc.z));
-    if(neutral_min>=code_floor){
-      float lo=0.0f,hi=1.0f;
-      for(int i=0;i<16;i++){
-        float mid=(lo+hi)*0.5f;
-        float3 candidate=neutral+delta*make_float3(mid,mid,mid);
-        float3 candidate_enc=logc3_encode_ei800(candidate);
-        float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
-        if(candidate_min>=code_floor)lo=mid;else hi=mid;
-      }
-      return neutral+delta*make_float3(lo,lo,lo);
-    }
-  }
-
-  float lo=0.0f,hi=1.0f;
-  for(int i=0;i<16;i++){
-    float mid=(lo+hi)*0.5f;
-    float3 candidate=rgb*make_float3(mid,mid,mid);
-    float3 candidate_enc=logc3_encode_ei800(candidate);
-    float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));
-    if(candidate_min>=code_floor)lo=mid;else hi=mid;
-  }
-  return rgb*make_float3(lo,lo,lo);
+  const float code_floor=-1.0f;float3 enc=logc3_encode_ei800(rgb);float mn=_fminf(enc.x,_fminf(enc.y,enc.z));if(mn>=code_floor)return rgb;
+  if(Y>0.0f){float3 neutral=make_float3(Y,Y,Y),delta=rgb-neutral;float3 neutral_enc=logc3_encode_ei800(neutral);float neutral_min=_fminf(neutral_enc.x,_fminf(neutral_enc.y,neutral_enc.z));
+    if(neutral_min>=code_floor){float lo=0.0f,hi=1.0f;for(int i=0;i<16;i++){float mid=(lo+hi)*0.5f;float3 candidate=neutral+delta*make_float3(mid,mid,mid);float3 candidate_enc=logc3_encode_ei800(candidate);float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));if(candidate_min>=code_floor)lo=mid;else hi=mid;}return neutral+delta*make_float3(lo,lo,lo);}}
+  float lo=0.0f,hi=1.0f;for(int i=0;i<16;i++){float mid=(lo+hi)*0.5f;float3 candidate=rgb*make_float3(mid,mid,mid);float3 candidate_enc=logc3_encode_ei800(candidate);float candidate_min=_fminf(candidate_enc.x,_fminf(candidate_enc.y,candidate_enc.z));if(candidate_min>=code_floor)lo=mid;else hi=mid;}return rgb*make_float3(lo,lo,lo);
 }
-
-// ---- Input Gamut Heal: ACES 1.3 RGC core in AP1 wrapper ----
-// Optional technical input repair only; AP1 is a local reference-operator domain, not Keystone's working space.
 __DEVICE__ float rgc_comp_dist(float dn,float t,float ss){if(dn<t)return dn;float x=(dn-t)/ss;float dp=_powf(_fmaxf(x,0.0f),1.2f);return t+(dn-t)/_powf(1.0f+dp,1.0f/1.2f);}
-__DEVICE__ float3 rgc_core_ap1(float3 rgb){float A=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z));float aa=_fabs(A);if(aa<=1e-20f)return rgb;float dnR=(A-rgb.x)/aa,dnG=(A-rgb.y)/aa,dnB=(A-rgb.z)/aa;float dcR=rgc_comp_dist(dnR,0.815f,0.327301877468f);float dcG=rgc_comp_dist(dnG,0.803f,0.285938028927f);float dcB=rgc_comp_dist(dnB,0.880f,0.146821457838f);return make_float3(A-dcR*aa,A-dcG*aa,A-dcB*aa);}
+__DEVICE__ float3 rgc_core_ap1(float3 rgb){float A=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z)),aa=_fabs(A);if(aa<=1e-20f)return rgb;float dnR=(A-rgb.x)/aa,dnG=(A-rgb.y)/aa,dnB=(A-rgb.z)/aa;float dcR=rgc_comp_dist(dnR,0.815f,0.327301877468f),dcG=rgc_comp_dist(dnG,0.803f,0.285938028927f),dcB=rgc_comp_dist(dnB,0.880f,0.146821457838f);return make_float3(A-dcR*aa,A-dcG*aa,A-dcB*aa);}
 __DEVICE__ float3 input_gamut_heal_xyz(float3 xyz){float3 ap1=mmul(X65_TO_AP1_C0,X65_TO_AP1_C1,X65_TO_AP1_C2,xyz);ap1=rgc_core_ap1(ap1);return mmul(AP1_TO_X65_C0,AP1_TO_X65_C1,AP1_TO_X65_C2,ap1);}
 
-__DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,float p_G,float p_B){
-  float c_temp=clampf(temp,WB_KMIN,WB_KMAX);
-  float c_tint=clampf(tint,-100.0f,100.0f);
-  float c_fns_pr=clampf(fns_printer_r,0.0f,50.0f);
-  float c_fns_pg=clampf(fns_printer_g,0.0f,50.0f);
-  float c_fns_pb=clampf(fns_printer_b,0.0f,50.0f);
-  float c_p_exposure=clampf(p_exposure,-6.0f,6.0f);
-  float c_p_bp=clampf(p_bp,-0.05f,0.05f);
-  float c_p_contrast=clampf(p_contrast,0.5f,2.0f);
-  float c_p_shadows=clampf(p_shadows,-1.0f,1.0f);
-  float c_p_highlights=clampf(p_highlights,-1.0f,1.0f);
-  float c_p_high_soft=clampf(p_high_soft,0.0f,2.0f);
-  float c_pos_saturation=clampf(pos_saturation,0.0f,1.0f);
-  float c_oklab_pos_saturation=clampf(oklab_pos_saturation,0.0f,1.0f);
-  float c_whiteclean=clampf(white_gamut_clean,0.0f,1.0f);
-  float c_blackclean=clampf(black_gamut_clean,0.0f,1.0f);
-  int raw_heal=(int)(input_gamut_heal+0.5f);
-  int c_heal=raw_heal==heal_aces_rgc?1:0;
+__DEVICE__ float3 ks_diag_neutral(float3 xyz){float3 lab=xyz_to_oklab(xyz);float C=_sqrtf(lab.y*lab.y+lab.z*lab.z);float v=clampf(C/0.25f,0.0f,1.0f);return make_float3(v,v,v);}
+__DEVICE__ float3 ks_diag_density(float3 rgb){float d0=clampf(density10(rgb.x)/3.0f,0.0f,1.0f),d1=clampf(density10(rgb.y)/3.0f,0.0f,1.0f),d2=clampf(density10(rgb.z)/3.0f,0.0f,1.0f);return make_float3(d0,d1,d2);}
+__DEVICE__ float3 ks_diag_gamut_stress(float3 rgb,float Y){float3 g=technical_encoded_negative_guard(rgb,Y);float delta=_fabs(g.x-rgb.x)+_fabs(g.y-rgb.y)+_fabs(g.z-rgb.z);return delta>1.0e-7f?make_float3(1.0f,0.0f,0.0f):make_float3(0.0f,0.0f,0.0f);}
+__DEVICE__ float3 ks_diag_skin(float3 xyz){float m=ks_skin_mask_rg(ks_skin_rg(xyz),xyz,1.0f);return make_float3(m,m,m);}
 
+__DEVICE__ float3 transform(int p_Width,int p_Height,int p_X,int p_Y,float p_R,float p_G,float p_B){
+  float c_temp=clampf(temp,WB_KMIN,WB_KMAX),c_tint=clampf(tint,-100.0f,100.0f);
+  float c_pr=clampf(fns_printer_r,10.0f,40.0f),c_pg=clampf(fns_printer_g,10.0f,40.0f),c_pb=clampf(fns_printer_b,10.0f,40.0f);
+  float c_exp=clampf(p_exposure,-6.0f,6.0f),c_bp=clampf(p_bp,-0.05f,0.05f),c_con=clampf(p_contrast,0.5f,2.0f);
+  float c_sh=clampf(p_shadows,-1.0f,1.0f),c_hi=clampf(p_highlights,-1.0f,1.0f),c_roll=clampf(p_high_soft,0.0f,2.0f);
+  float c_fstrength=clampf(film_strength,0.0f,1.0f),c_fpm=clampf(film_printer_master,-12.0f,12.0f),c_response=clampf(film_response,0.0f,1.0f),c_dir=clampf(dir_amount,0.0f,1.0f);
+  float c_ccc=clampf(print_c_cc,-40.0f,40.0f),c_ccm=clampf(print_m_cc,-40.0f,40.0f),c_ccy=clampf(print_y_cc,-40.0f,40.0f);
+  int c_profile=(int)(film_profile+0.5f);if(c_profile<0)c_profile=0;if(c_profile>3)c_profile=3;
+  int c_resp_on=film_response_on?1:0,c_dir_on=dir_on?1:0,c_color_on=color_on?1:0,c_split_on=split_on?1:0,c_safe=safe_mode?1:0;
+  int c_view=(int)(diag_view+0.5f);
+  int c_sp=(int)(split_preset+0.5f);if(c_sp<0)c_sp=0;if(c_sp>15)c_sp=15;float c_spamt=clampf(split_preset_amt,0.0f,1.5f);
+  float c_pos=clampf(pos_sat,0.0f,1.0f),c_dye=clampf(dye_couple,0.0f,1.0f);
+  float c_wc=clampf(white_gamut_clean,0.0f,1.0f),c_bc=clampf(black_gamut_clean,0.0f,1.0f);
+  int c_heal=((int)(input_gamut_heal+0.5f)==heal_aces_rgc)?1:0;
   float3 input=make_float3(p_R,p_G,p_B);
 
-  bool base_neutral=
-    c_heal==0&&
-    _fabs(c_temp-WB_K0)<=1e-4f&&_fabs(c_tint)<=1e-7f&&
-    _fabs(c_p_exposure)<=1e-7f&&_fabs(c_p_bp)<=1e-7f&&
-    _fabs(c_p_contrast-1.0f)<=1e-7f&&
-    _fabs(c_p_shadows)<=1e-7f&&_fabs(c_p_highlights)<=1e-7f&&
-    c_p_high_soft<=1e-7f&&c_pos_saturation<=1e-7f&&c_oklab_pos_saturation<=1e-7f&&
-    _fabs(c_fns_pr-25.0f)<=1e-7f&&_fabs(c_fns_pg-25.0f)<=1e-7f&&_fabs(c_fns_pb-25.0f)<=1e-7f&&
-    c_whiteclean<=1e-7f&&c_blackclean<=1e-7f;
-  if(base_neutral)return input;
+  bool neutral=c_heal==0&&_fabs(c_temp-WB_K0)<=1e-4f&&_fabs(c_tint)<=1e-7f&&
+    _fabs(c_fpm)<=1e-7f&&_fabs(c_ccc)<=1e-7f&&_fabs(c_ccm)<=1e-7f&&_fabs(c_ccy)<=1e-7f&&_fabs(c_pr-25.0f)<=1e-7f&&_fabs(c_pg-25.0f)<=1e-7f&&_fabs(c_pb-25.0f)<=1e-7f&&
+    _fabs(c_exp)<=1e-7f&&_fabs(c_bp)<=1e-7f&&_fabs(c_con-1.0f)<=1e-7f&&_fabs(c_sh)<=1e-7f&&_fabs(c_hi)<=1e-7f&&c_roll<=1e-7f&&
+    c_response<=1e-7f&&c_dir<=1e-7f&&c_pos<=1e-7f&&c_dye<=1e-7f&&
+    c_sp==0&&_fabs(split_sh_r)<=1e-7f&&_fabs(split_sh_g)<=1e-7f&&_fabs(split_sh_b)<=1e-7f&&_fabs(split_hi_r)<=1e-7f&&_fabs(split_hi_g)<=1e-7f&&_fabs(split_hi_b)<=1e-7f&&
+    c_wc<=1e-7f&&c_bc<=1e-7f&&c_view==view_result;
+  if(neutral)return input;
 
   float3 lin=logc3_decode_ei800(input);
-
-  if(c_heal==1){
-    float3 repair_xyz=awg3_to_xyz(lin);
-    repair_xyz=input_gamut_heal_xyz(repair_xyz);
-    lin=xyz_to_awg3(repair_xyz);
-  }
+  if(c_heal==1){float3 repair_xyz=awg3_to_xyz(lin);repair_xyz=input_gamut_heal_xyz(repair_xyz);lin=xyz_to_awg3(repair_xyz);}
 
   float3 xyz=awg3_to_xyz(lin);
+  if(_fabs(c_temp-WB_K0)>1e-4f||_fabs(c_tint)>1e-7f)xyz=apply_bradford_wb_xyz(xyz,c_temp,c_tint);
 
-  if(_fabs(c_temp-WB_K0)>1e-4f||_fabs(c_tint)>1e-7f)
-    xyz=apply_bradford_wb_xyz(xyz,c_temp,c_tint);
 
-  // True scene-linear global exposure.
-  if(_fabs(c_p_exposure)>1.0e-7f){
-    float k=_powf(2.0f,c_p_exposure);
-    xyz*=make_float3(k,k,k);
-  }
+  if(_fabs(c_exp)>1.0e-7f){float k=_powf(2.0f,c_exp);xyz*=make_float3(k,k,k);}
+  if(_fabs(c_bp)>1.0e-9f)xyz=apply_soft_black_point_xyz(xyz,c_bp);
 
-  // Exact Primera Black Point: linear RGB, immediately after Exposure.
-  if(_fabs(c_p_bp)>1.0e-9f)
-    xyz=apply_primera_black_point_xyz(xyz,c_p_bp);
-
-  // Film Negative Space is used only for printer-light density balance.
-  bool printer_active=
-    _fabs(c_fns_pr-25.0f)>1e-7f||
-    _fabs(c_fns_pg-25.0f)>1e-7f||
-    _fabs(c_fns_pb-25.0f)>1e-7f;
+  float eff_pr=c_pr,eff_pg=c_pg,eff_pb=c_pb;
+  bool printer_active=_fabs(eff_pr-25.0f)>1e-7f||_fabs(eff_pg-25.0f)>1e-7f||_fabs(eff_pb-25.0f)>1e-7f;
   if(printer_active){
-    float3 neg=xyz_to_awg3(xyz);
-    neg=fns_forward_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
-    neg=fns_apply_printer_lights(neg,c_fns_pr,c_fns_pg,c_fns_pb);
-    neg=fns_inverse_rgb(neg,KEYSTONE_FNS_MID_IN,KEYSTONE_FNS_MID_OUT,KEYSTONE_FNS_BELOW,KEYSTONE_FNS_ABOVE,KEYSTONE_FNS_BLEND);
-    neg=technical_scene_ceiling_guard(neg);
-    xyz=awg3_to_xyz(neg);
+    float3 neg=xyz_to_awg3(xyz);neg=fns_forward_rgb(neg);neg=fns_apply_printer_lights(neg,eff_pr,eff_pg,eff_pb);neg=fns_inverse_rgb(neg);neg=technical_scene_ceiling_guard(neg);xyz=awg3_to_xyz(neg);
   }
 
-  // Exact Primera rolling contrast at default pivot, in AWG3 / LogC3.
-  xyz=apply_primera_contrast_xyz(xyz,c_p_contrast);
+  xyz=apply_logc3_contrast_xyz(xyz,c_con);
+  xyz=apply_keystone_hybrid_zones_xyz(xyz,c_sh,c_hi);
+  if(c_roll>1.0e-7f)xyz=apply_auto_rolloff_xyz(xyz,0.18f,c_roll);
 
-  xyz=apply_keystone_hybrid_zones_xyz(xyz,c_p_shadows,c_p_highlights);
+  lin=xyz_to_awg3(xyz);
+  float eff_response=c_response*c_fstrength;
+  float eff_dir=c_dir*c_fstrength;
+  float eff_pos=c_pos*c_fstrength;
+  float eff_dye=c_dye*c_fstrength;
+  if(c_resp_on&&eff_response>1.0e-7f)lin=apply_film_response(lin,eff_response,(c_dir_on?eff_dir:0.0f),c_profile,c_fpm*c_fstrength,c_ccc*c_fstrength,c_ccm*c_fstrength,c_ccy*c_fstrength);
+  if(c_color_on&&eff_dye>1.0e-7f)lin=apply_dye_coupling(lin,eff_dye);
+  if(c_color_on&&eff_pos>1.0e-7f)lin=apply_pos_sat_logc3(lin,eff_pos);
+  if(c_split_on&&c_fstrength>1.0e-7f){
+    float3 psh=ks_split_preset_shadow(c_sp)*make_float3(c_spamt,c_spamt,c_spamt);
+    float3 phi=ks_split_preset_high(c_sp)*make_float3(c_spamt,c_spamt,c_spamt);
+    lin=apply_split_tone(lin,(split_sh_r+psh.x)*c_fstrength,(split_sh_g+psh.y)*c_fstrength,(split_sh_b+psh.z)*c_fstrength,(split_hi_r+phi.x)*c_fstrength,(split_hi_g+phi.y)*c_fstrength,(split_hi_b+phi.z)*c_fstrength,split_pivot,split_balance);
+  }
+  xyz=awg3_to_xyz(lin);
+  if(c_safe){float3 safe_cam=technical_encoded_negative_guard(lin,xyz.y);lin=safe_cam;xyz=awg3_to_xyz(lin);}
 
-  if(c_p_high_soft>1.0e-7f)
-    xyz=apply_auto_rolloff_xyz(xyz,0.18f,c_p_high_soft);
+  if(c_wc>1e-7f)xyz=clean_neutral_highlights_xyz(xyz,c_wc);
+  if(c_bc>1e-7f)xyz=clean_neutral_shadows_xyz(xyz,c_bc);
 
-  if(c_pos_saturation>1.0e-7f)
-    xyz=apply_primera_pos_sat_xyz(xyz,c_pos_saturation);
-
-  if(c_oklab_pos_saturation>1.0e-7f)
-    xyz=apply_oklab_pos_sat_xyz(xyz,c_oklab_pos_saturation);
-
-  if(c_whiteclean>1e-7f)
-    xyz=clean_neutral_highlights_xyz(xyz,c_whiteclean);
-  if(c_blackclean>1e-7f)
-    xyz=clean_neutral_shadows_xyz(xyz,c_blackclean);
-
-  float3 cam=xyz_to_awg3(xyz);
-
-  // Catastrophic-only guards. Recompute current scene Y after every operation that
-  // can rescale RGB so later guards never use stale luminance.
-  cam=technical_scene_ceiling_guard(cam);
-  float3 current_xyz=awg3_to_xyz(cam);
-  float currentY=current_xyz.y;
-
+  float3 cam=xyz_to_awg3(xyz);cam=technical_scene_ceiling_guard(cam);float currentY=awg3_to_xyz(cam).y;
+  if(c_view==view_neutral)return logc3_encode_ei800(ks_diag_neutral(xyz));
+  if(c_view==view_density)return logc3_encode_ei800(ks_diag_density(cam));
+  if(c_view==view_gamut)return logc3_encode_ei800(ks_diag_gamut_stress(cam,currentY));
+  if(c_view==view_skin)return logc3_encode_ei800(ks_diag_skin(xyz));
   cam=technical_encoded_negative_guard(cam,currentY);
   float3 result=logc3_encode_ei800(cam);
-
-  // Coherent failure fallback: never zero one channel independently.
   if(finitef(result.x)&&finitef(result.y)&&finitef(result.z))return result;
   if(finitef(input.x)&&finitef(input.y)&&finitef(input.z))return input;
   return make_float3(0.0f,0.0f,0.0f);

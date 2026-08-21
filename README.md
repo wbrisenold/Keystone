@@ -1,175 +1,110 @@
-# Keystone
+# Keystone v2.6.1
 
-Keystone is a DaVinci Resolve DCTL for grading in **ARRI Wide Gamut 3 / LogC3 EI800**. It is designed as a compact balance, tone, color, and skin-shaping node that sits **before the output transform**.
+Keystone is a DaVinci Resolve DCTL for **ARRI Wide Gamut 3 / LogC3 EI800** grading. v2.6.1 keeps the matrix-free photochemical core, print-stage C/M/Y filtration, and density-look presets, while replacing the artifact-prone density subtractive-saturation control with Primera Suite Pos Sat behavior.
 
-Current version: **v1.13.1**
+## What changed in v2.6.1
 
-## Node placement
+### Enlarger C / M / Y filtration
 
-Recommended order:
+`Print / C CC`, `Print / M CC`, and `Print / Y CC` live between the negative and print stages. The source convention is Kodak CC optical-density units: **100 CC = 1.0 density = 10% transmission**. Keystone translates positive C/M/Y to reduced red/green/blue print exposure respectively. The controls are neutral at 0 and require Film Response to be active.
 
-```text
-Camera normalization -> Look / Film Matrix -> Advanced Toning -> Keystone -> ODT -> optional display look
-```
+### Density-look presets
 
-Keystone expects **AWG3 / LogC3 EI800 in and out**. It does not contain a display transform.
+`Split / Preset` and `Split / Preset Amt` feed directly into Keystone's density split-tone engine. Manual `Split / Sh R/G/B` and `Split / Hi R/G/B` remain available as trims on top of the preset. The pivot remains untouched by construction, so using a preset does not silently tint the protected middle-gray zone.
 
-## Controls
+The first ten presets preserve the shadow/highlight intent of the earlier MIT-licensed Advanced Toning DCTL while translating the look into density offsets instead of running its older three-zone Oklab engine:
 
-### Input
-- `Input / Fix` — optional ACES 1.3 reference-gamut-compression repair
+- Warm Cool
+- Cool Warm
+- Amber Cyan
+- Cyan Amber
+- Olive Cream
+- Teal Orange
+- Warm Vintage
+- Cool Silver
+- Sodium Cyan
+- Moonlight Warm Skin
 
-### White balance
-- `WB / Temp K` — 2500K to 20000K, D65 default 6504K
-- `WB / Tint` — -100 to +100
+Additional Keystone-authored familiar tone families are:
 
-White balance is the **exact implementation from Keystone v1.7 Studio Production Candidate**: CCT is converted to a source-white locus, Tint offsets that white in uv space, then one Bradford chromatic adaptation returns the source white to D65. A scalar normalization keeps D65-neutral scene luminance unchanged.
+- Sepia
+- Bleach Cool
+- Golden Hour
+- Dusk Purple
+- Tobacco Teal
 
-### Negative
-- `Neg / R`
-- `Neg / G`
-- `Neg / B`
+These are creative starting points, not claims of matching a named film stock, lab process, or commercial LUT.
 
-These are printer-light controls inside Keystone's reversible film-negative working model.
+## Processing order
 
-### Tone
-- `Tone / Exp`
-- `Tone / Black Pt`
-- `Tone / Contrast`
+Input repair -> Bradford WB -> scene exposure -> soft black point -> negative-space RGB printer trims -> LogC3 rolling contrast -> shadows/highlights -> rolloff -> H&D negative development + optional DIR -> enlarger C/M/Y filtration + master print exposure -> print H&D -> density subtractive color -> density look/split tone -> Safe guard -> white/black cleanup with skin protection -> technical guards -> LogC3 EI800.
 
-`Tone / Black Pt` now uses Primera's exact Black Point behavior: `-0.05` to `+0.05`, step `0.0001`, with the fixed `0.005` soft knee. It runs independently on scene-linear AWG3 R/G/B immediately after Exposure.
+## Current Resolve workflow
 
-- `Tone / Shadows`
-- `Tone / Highlights`
-- `Tone / Roll`
-
-Contrast now uses **Primera's rolling contrast equation** independently on AWG3 / LogC3 RGB channels, at Primera's default Pivot of `0.0` (encoded 18% gray). This is intentionally per-channel: the contrast increase also creates the saturation/color-separation behavior of Primera. No separate contrast-saturation coupling is added.
-
-### Color
-- `Color / Pos Sat`
-- `Color / Oklab Pos`
-
-`Color / Pos Sat` is the Primera-style encoded-domain HSV saturation control:
-1. encode current AWG3 linear RGB to LogC3
-2. convert LogC3 RGB to HSV
-3. multiply HSV saturation by `2^amount`
-4. cap HSV saturation at `1.0`
-5. convert back to RGB and decode LogC3
-
-`Color / Oklab Pos` is a second, separate positive-only saturation control for direct comparison:
-1. convert current scene XYZ to Oklab
-2. keep Oklab `L` fixed
-3. multiply Oklab chroma by `2^amount`
-4. keep hue angle fixed
-5. convert back to XYZ and rescale to preserve original scene `Y`
-6. apply a **small density coupling** based on the achieved chroma increase
-
-That density coupling is intentionally modest. Neutrals stay mostly untouched, while more colorful pixels get a slightly richer, denser feel so the Oklab slider is not as clinically clean as a pure lightness-preserving saturation operator.
-
-Both sliders are `0` to `1`, where `0` is exact bypass. For a clean comparison, keep one of them at `0`.
-
-
-### Output cleanup
-- `Out / White`
-- `Out / Black`
-
-These controls reduce chroma only in near-neutral highlights or shadows while preserving scene luminance.
-
-They retain **automatic skin protection**, but there are no user-facing Skin controls. A small internal fixed skin qualifier is used only to keep Output cleanup from pulling useful color out of faces.
-
-## Installation
-
-Copy `Keystone.dctl` into your DaVinci Resolve LUT/DCTL folder, then refresh LUTs or restart Resolve.
-
-Common locations:
-
-### macOS
+Recommended working tree for the current setup:
 
 ```text
-~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Support/LUT/
+CST: camera -> AWG3 / LogC3
+    -> PresenceOFX
+    -> Keystone
+    -> PrimeraSkin
+    -> HB Color Separation DCTL
+    -> KH Gamut Compressor
+    -> Referent LogC3 -> Rec.709 ODT LUT
+    -> FilmBox Rec.709 look LUT
+    -> MonoNodes Balance Charts
 ```
 
-### Windows
+**Advanced Toning is normally redundant in this tree now.** Its most useful warm/cool look families have been translated into Keystone's density-look presets. Keep the standalone node only for a shot where its old midtone-specific Oklab behavior is intentionally desired.
 
-```text
-%AppData%\Blackmagic Design\DaVinci Resolve\Support\LUT\
-```
+**LookLab WB is also normally redundant when it is off or when Keystone is handling WB.** Keystone's Bradford Kelvin/Tint correction should remain the main balance stage unless a specific LookLab transform is intentionally required.
 
-### Linux
+HB Color Separation remains a separate creative stage by design. Keystone's density color handles subtractive/dye behavior; HB remains available as a later dedicated color-separation look before gamut compression.
 
-```text
-~/.local/share/DaVinciResolve/LUT/
-```
+## Film controls
 
-You can then load Keystone through Resolve's DCTL OFX or apply it from the LUT/DCTL list depending on your workflow.
+`Film / Profile` selects Neutral, Latitude, Punch, or Chrome behavioral H&D families. These are family shapes, not commercial stock matches. `Film / Print M` is the master printer exposure in printer points, where one point is 0.025 log10 exposure. `Film / DIR` controls non-spatial inter-layer inhibitor behavior. `Color / Pos Sat` uses Primera Suite's positive HSV saturation behavior in LogC3-encoded AWG3; `Color / Dye` remains the independent density-domain dye-coupling control.
 
-## Input requirement
+`Film / Strength` scales Film Response, DIR, master print exposure, C/M/Y filtration, subtractive color, and split/look density offsets. It does not change WB, scene exposure, contrast, shadows/highlights, rolloff, or output cleanup.
 
-Normalize camera footage to **ARRI Wide Gamut 3 / LogC3 EI800** before Keystone.
+## Diagnostics
 
-Example:
+`View / Mode` provides Result, Neutral Chroma, Density, Gamut Stress, and Skin Mask views.
 
-```text
-Apple Log -> CST to AWG3/LogC3 -> Keystone -> ODT
-```
+## Credits and upstream sources
 
-Do not put Keystone after a Rec.709 ODT.
+Keystone combines original integration work with openly available color-science code and ideas. Upstream names are intentionally kept out of the DCTL implementation itself; attribution is explicit here and in `THIRD_PARTY_NOTICES.md`.
 
-## Validation
+### Incorporated or directly adapted
 
-This repository includes a lightweight validator:
+- **Speak** — H&D negative/print curve model, behavioral profile families, printer-point convention, density-domain subtractive color, dye coupling, and density split-toning foundations. GitHub: https://github.com/amateurmenace/Speak
+- **spektrafilm** by Andrea Volpato — DIR donor/receiver development model, DIR source defaults and pre-correction concept, and enlarger CC filtration convention. GitHub: https://github.com/andreavolpato/spektrafilm
+- **Primera Suite** by Geoff Smith — black-point and rolling-contrast behavior retained from earlier Keystone development. GitHub: https://github.com/geoffsmithBK/primera-suite
+- **Thatcher Freeman utility-dctls** — reference work used during earlier tone-scale and DCTL development. GitHub: https://github.com/thatcherfreeman/utility-dctls
+- **ACES 1.3 Reference Gamut Compression** — optional input gamut-repair reference implementation. GitHub: https://github.com/ampas/aces-vwg-gamut-mapping-2020
 
-```bash
-python3 tools/validate.py Keystone.dctl
-```
+### Reviewed or workflow references
 
-It checks for common Resolve DCTL failure points including:
+- **Photographic DCTLs** by Mikael Sundell — previous film-matrix research reference; the fixed matrix remains removed. GitHub: https://github.com/mikaelsundell/photographic-dctls
+- **Uffy PhotoChemical Look Process** — workflow/component reference only. GitHub: https://github.com/RichardUffy/Uffy-PhotoChemical-Look-Process-for-DaVinci-Resolve-Studio
+- **Kodak2383_Emulation** — research reference only; no implementation copied. GitHub: https://github.com/lakravana/Kodak2383_Emulation
+- **Dec. 18 Studios** — Film Negative Space workflow/reference influence during earlier development. GitHub: https://github.com/Dec18studios
+- **HB Color Separation DCTL** — used as a separate downstream color-separation stage in the recommended Resolve workflow. It is not incorporated into Keystone.
 
-- malformed or multiline UI macros
-- missing or duplicate `transform()`
-- transform-signature drift
-- unbalanced braces and parentheses
-- parser-sensitive UI labels
-- `while` loops
-- unresolved symbolic `PI`
-- unused `__DEVICE__` helper functions
+Keystone is distributed under **GPL-3.0-only** because GPLv3-covered source is incorporated into the combined work. No spektrafilm stock profile/LUT database assets are bundled.
 
-GitHub Actions runs the same validation on pushes and pull requests.
+## Vibe-coded disclosure
 
-**Passing these checks does not prove Resolve/Metal runtime compatibility. The final test is loading the exact DCTL in DaVinci Resolve.**
+**This entire Keystone project was vibe coded.** The DCTL, math translations, integration decisions, creative preset translations, refactors, validation scripts, documentation, packaging, and release automation were produced through iterative human-directed AI coding. Source files and licenses were reviewed and credited, but AI-generated code can still contain mistakes, mistranslations, edge cases, or host-specific issues. The project is provided without a warranty of correctness, fitness, or production safety; users remain responsible for validating it in their own Resolve environment and on their own material.
 
-## Releases
+## Production status
 
-The repository automatically creates a new GitHub Release when the version changes.
+v2.6.1 is code- and package-hardened: all exposed controls have hover help, new features default to identity, matrix code remains absent, filtration placement is explicit, numerical guards remain in place, and release metadata/validators cover the new modules. Resolve host/runtime testing is intentionally outside this preparation pass.
 
-Versioning is controlled by:
+### Camera UV/IR note
 
-```text
-VERSION
-```
+Keystone intentionally does not expose camera UV/IR filters. The upstream operation changes wavelength-resolved film sensitivity before film exposure; a three-channel RGB DCTL cannot reproduce that faithfully. Use a spectral film simulator for this stage.
 
-and the first line of `Keystone.dctl`:
 
-```text
-// Keystone v1.13.1
-```
-
-Those two values must match.
-
-When a commit reaches `main`, the release workflow:
-
-1. validates `Keystone.dctl`
-2. reads the version
-3. skips publishing if that version already has a GitHub Release
-4. creates tag `vX.Y.Z`
-5. packages the repository as `Keystone-vX.Y.Z.zip`
-6. attaches both the ZIP and `Keystone-vX.Y.Z.dctl`
-7. publishes the release as the latest GitHub Release
-
-To publish the next version, update both `VERSION` and the DCTL header, then push to `main`.
-
-You can also run **Release Keystone** manually from the Actions tab.
-
-## License
-
-Keystone is distributed under the MIT License. Third-party code and algorithm notices are documented in `THIRD_PARTY_NOTICES.md`.
+## v2.6.1 stability correction
+v2.6.0 is withdrawn. v2.6.1 rebuilds the density-domain hardening from v2.5.1 with all helper functions declared before use and runtime clamps matched to their UI ranges.

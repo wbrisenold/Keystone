@@ -1,65 +1,71 @@
 # Third-Party Notices
 
-Keystone includes or adapts ideas from third-party open-source color-science work. These notices are kept with the repository so redistribution preserves the relevant attribution.
+Keystone v2.5.1 is distributed as a combined work under **GNU GPL v3 only** (`GPL-3.0-only`). The notices below identify source incorporated into or directly adapted by the DCTL.
 
-## Thatcher Freeman — utility-dctls
+## Keystone prior code
 
-Keystone's Daniele tone-scale core follows Thatcher Freeman's MIT-licensed DCTL implementation, based on Daniele Siragusano's tone-scale proposal.
+Keystone v1.13.1 was distributed under the MIT License.
 
-MIT License
+Copyright (c) 2026 Keystone contributors
 
-Copyright (c) 2023 Thatcher Freeman
+The v2.4.2 DCTL retains Keystone's AWG3/XYZ and LogC3 plumbing, Bradford white balance, ACES Reference Gamut Compression wrapper, Primera-derived grading operators, Film Negative Space printer-light operator, output cleanup, and technical guards.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+## Primera Suite — Geoff Smith
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+Source: https://github.com/geoffsmithBK/primera-suite
+License: MIT
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Earlier Keystone development adapted the soft black-point and rolling-contrast behavior from Primera Suite. v2.4.2 keeps those operators under Keystone-native function names while preserving credit here and in the README.
 
-Project: `thatcherfreeman/utility-dctls`
+## Speak Film — OpenNR contributors
 
-## Geoff Smith — PrimeraSkin / primera-suite
+Source: https://github.com/amateurmenace/Speak
+License: MIT
+Copyright (c) 2026 OpenNR contributors
 
-Keystone's selective skin-control workflow was informed by PrimeraSkin, including the use of brightness-independent chromaticity ideas for skin qualification.
+Used/adapted in Keystone:
+- closed-form H&D characteristic curve
+- Speak `neutralProfile()` negative and print parameters
+- optical-density conversion
+- density-domain subtractive saturation
+- generic asymmetric dye-coupler coefficients
+- density-domain split toning and its 18% gray pivot
 
-MIT License
+MIT notice:
 
-Copyright (c) 2026 Geoff Smith
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+## spektrafilm — Andrea Volpato
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Source: https://github.com/andreavolpato/spektrafilm
+Software license: GPLv3
 
-Project: `geoffsmithBK/primera-suite`
+Used/adapted in Keystone:
+- non-spatial DIR inhibitor matrix convention (donor layer -> receiver layer)
+- default same-layer and inter-layer DIR coefficients
+- normalized-density DIR exposure correction
+- pre-DIR characteristic-curve correction concept used to keep a gray ramp on the supplied characteristic curve
+- enlarger Kodak CC optical-density convention (`100 CC = 1.0 density`)
 
-## Academy Color Encoding System — ACES
 
-The optional `Input / Fix` mode implements the core structure of ACES 1.3 Reference Gamut Compression in an AP1 wrapper. ACES reference transforms are distributed by the Academy Software Foundation under the Apache License 2.0.
+Keystone does **not** ship or derive from spektrafilm stock profiles or LUTs. Those assets have a separate `CC BY-SA 4.0` license in spektrafilm's `SPEKTRAFILM_LICENSE.txt`; that asset license therefore does not attach to this package.
 
-Project: `aces-aswf/aces` and related ACES reference repositories.
+SpektraFilm's spatial DIR diffusion, grain, halation, diffusion-filter, glare, scanner, stock spectral sensitivity databases, and profile/LUT assets are not copied into this per-pixel DCTL.
 
-Nothing in this repository implies endorsement by the Academy Software Foundation, the Academy of Motion Picture Arts and Sciences, ARRI, Blackmagic Design, or any other vendor whose color spaces or products are referenced.
 
-## Keystone Skin Section
+## Uffy PhotoChemical Look Process
 
-The current Keystone Skin section is intentionally designed to behave like a Primera-style skin-control module. It is an independent Keystone implementation informed by that workflow and redistributed under Keystone's repository license structure with this attribution notice preserved.
+Source: https://github.com/RichardUffy/Uffy-PhotoChemical-Look-Process-for-DaVinci-Resolve-Studio
 
-## Primera Pos Saturation
+No Uffy source code or LUT data is incorporated. The repository was reviewed only as a workflow/component reference. Its README explicitly identifies several upstream/forked components; no repository-wide blanket license was established during this audit, so nothing from it was copied.
 
-`Color / Pos Sat` in Keystone v1.10.0 adapts the Pos. Saturation algorithm from Primera by Geoff Smith: encoded RGB is converted to HSV, saturation is multiplied by `2^amount`, capped at 1.0, then converted back to RGB. Keystone applies this in its fixed AWG3 / LogC3 EI800 signal.
+## Kodak2383_Emulation
 
-Primera / primera-suite is MIT licensed. Copyright (c) 2026 Geoff Smith. The full Primera MIT notice above remains applicable.
+Source: https://github.com/lakravana/Kodak2383_Emulation
 
-## Primera Contrast
+No code or look data is incorporated. At audit time the repository exposed a README but no auditable implementation/license grant for a DCTL source, so it is excluded from Keystone.
 
-`Tone / Contrast` in Keystone v1.11.0 adapts Primera's `rolling_contrast` algorithm by Geoff Smith. Keystone applies it in its fixed AWG3 / LogC3 EI800 signal at Primera's default Pivot value of 0.0.
-
-Primera / primera-suite is MIT licensed. Copyright (c) 2026 Geoff Smith. The Primera MIT notice in this repository remains applicable.
-
-## Primera Black Point
-
-`Tone / Black Pt` in Keystone v1.12.0 adapts Primera's `soft_black_point` algorithm by Geoff Smith. It uses the same `0.005` knee and Primera slider semantics, applied to Keystone's scene-linear AWG3 RGB immediately after Exposure.
-
-Primera / primera-suite is MIT licensed. Copyright (c) 2026 Geoff Smith. The Primera MIT notice in this repository remains applicable.
+### Primera Suite Pos Sat
+Keystone v2.5.1 directly adapts the Pos Sat HSV algorithm from Primera Suite v0.6.0. Upstream: https://github.com/geoffsmithBK/primera-suite . The implementation provenance and source commit are documented in SOURCE_AUDIT.md.
