@@ -50,12 +50,12 @@ CST: camera -> AWG3 / LogC3
     -> PresenceOFX
     -> Keystone
     -> HB Color Separation DCTL
-    -> Referent ODT: LogC3 -> display space
+    -> [Referent ODT](https://cullenkellycolor.com/toolkit/referent): LogC3 -> display space
     -> Look LUT: display-referred look
-    -> MonoNodes Chart DCTL: final chart / display QC
+    -> [MonoNodes Chart DCTL](https://mononodes.com/dctls/): final chart / display QC
 ```
 
-The system boundary is deliberate: keep technical work in LogC3 until Keystone is complete, then use the Referent ODT to move into display space before the look LUT and chart check. HB Color Separation remains a separate creative stage; its paid license and support belong to Henry Bobeck, not this repository.
+The system boundary is deliberate: keep technical work in LogC3 until Keystone is complete, then use [Referent](https://cullenkellycolor.com/toolkit/referent), Cullen Kelly's free viewing LUT and display foundation, to move into display space before the look LUT and chart check. [MonoNodes](https://mononodes.com/dctls/) publishes DCTLs and workflow tools for colorists; the chart stage belongs at the end for display QC. HB Color Separation remains a separate creative stage; its paid license and support belong to Henry Bobeck, not this repository.
 
 ## Film controls
 
