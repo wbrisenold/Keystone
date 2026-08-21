@@ -95,6 +95,8 @@ Keystone is distributed under **GPL-3.0-only** because GPLv3-covered source is i
 
 **This entire Keystone project was vibe coded.** The DCTL, math translations, integration decisions, creative preset translations, refactors, validation scripts, documentation, packaging, and release automation were produced through iterative human-directed AI coding. Source files and licenses were reviewed and credited, but AI-generated code can still contain mistakes, mistranslations, edge cases, or host-specific issues. The project is provided without a warranty of correctness, fitness, or production safety; users remain responsible for validating it in their own Resolve environment and on their own material.
 
+The connected workflow was tested on footage recorded in Apple Log and Canon Log 3. Those tests document the author's working setup; they are not a guarantee that every camera, CST configuration, GPU, or Resolve version will behave identically.
+
 ## Production status
 
 v2.6.1 is code- and package-hardened: all exposed controls have hover help, new features default to identity, matrix code remains absent, filtration placement is explicit, numerical guards remain in place, and release metadata/validators cover the new modules. Resolve host/runtime testing is intentionally outside this preparation pass.
