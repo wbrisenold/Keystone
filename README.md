@@ -12,7 +12,7 @@ Keystone is a DaVinci Resolve DCTL for **ARRI Wide Gamut 3 / LogC3 EI800** gradi
 
 `Split / Preset` and `Split / Preset Amt` feed directly into Keystone's density split-tone engine. Manual `Split / Sh R/G/B` and `Split / Hi R/G/B` remain available as trims on top of the preset. The pivot remains untouched by construction, so using a preset does not silently tint the protected middle-gray zone.
 
-The first ten presets preserve the shadow/highlight intent of the earlier MIT-licensed Advanced Toning DCTL while translating the look into density offsets instead of running its older three-zone Oklab engine:
+The first ten presets preserve a warm/cool shadow/highlight intent while translating the look into density offsets instead of running a separate three-zone Oklab engine:
 
 - Warm Cool
 - Cool Warm
@@ -54,8 +54,6 @@ CST: camera -> AWG3 / LogC3
     -> FilmBox Rec.709 look LUT
     -> MonoNodes Balance Charts
 ```
-
-**Advanced Toning is normally redundant in this tree now.** Its most useful warm/cool look families have been translated into Keystone's density-look presets. Keep the standalone node only for a shot where its old midtone-specific Oklab behavior is intentionally desired.
 
 **LookLab WB is also normally redundant when it is off or when Keystone is handling WB.** Keystone's Bradford Kelvin/Tint correction should remain the main balance stage unless a specific LookLab transform is intentionally required.
 
