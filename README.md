@@ -1,6 +1,8 @@
 # Keystone v2.6.1
 
-Keystone is a DaVinci Resolve DCTL for **ARRI Wide Gamut 3 / LogC3 EI800** grading. v2.6.1 keeps the matrix-free photochemical core, print-stage C/M/Y filtration, and density-look presets, while replacing the artifact-prone density subtractive-saturation control with Primera Suite Pos Sat behavior.
+Keystone is the primary balance and tone stage in a small DaVinci Resolve system. It works in **ARRI Wide Gamut 3 / LogC3 EI800**, handling exposure, tone, white balance, gamut/neutral cleanup, density color, and technical finishing before the display transform.
+
+This is not a collection of unrelated nodes. The companion workflow uses CST for the camera transform, PresenceOFX for spatial image character, Keystone for technical balance, Henry Bobeck's paid [Color Separation DCTL](https://henrybobeck.com/dctl/ColorSeparation) for the dedicated separation stage, a Referent ODT, a display-referred look LUT, and MonoNodes charts for final display QC. The Color Separation DCTL is Henry Bobeck's product. If you use it, support its creator by purchasing it from the official page.
 
 ## What changed in v2.6.1
 
@@ -47,17 +49,13 @@ Recommended working tree for the current setup:
 CST: camera -> AWG3 / LogC3
     -> PresenceOFX
     -> Keystone
-    -> PrimeraSkin
     -> HB Color Separation DCTL
-    -> KH Gamut Compressor
-    -> Referent LogC3 -> Rec.709 ODT LUT
-    -> FilmBox Rec.709 look LUT
-    -> MonoNodes Balance Charts
+    -> Referent ODT: LogC3 -> display space
+    -> Look LUT: display-referred look
+    -> MonoNodes Chart DCTL: final chart / display QC
 ```
 
-**LookLab WB is also normally redundant when it is off or when Keystone is handling WB.** Keystone's Bradford Kelvin/Tint correction should remain the main balance stage unless a specific LookLab transform is intentionally required.
-
-HB Color Separation remains a separate creative stage by design. Keystone's density color handles subtractive/dye behavior; HB remains available as a later dedicated color-separation look before gamut compression.
+The system boundary is deliberate: keep technical work in LogC3 until Keystone is complete, then use the Referent ODT to move into display space before the look LUT and chart check. HB Color Separation remains a separate creative stage; its paid license and support belong to Henry Bobeck, not this repository.
 
 ## Film controls
 
