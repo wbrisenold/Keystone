@@ -4,6 +4,18 @@ Keystone is the primary balance and tone stage in a small DaVinci Resolve system
 
 This is not a collection of unrelated nodes. The companion workflow uses CST for the camera transform, PresenceOFX for spatial image character, Keystone for technical balance, Henry Bobeck's paid [Color Separation DCTL](https://henrybobeck.com/dctl/ColorSeparation) for the dedicated separation stage, a Referent ODT, a display-referred look LUT, and MonoNodes charts for final display QC. The Color Separation DCTL is Henry Bobeck's product. If you use it, support its creator by purchasing it from the official page.
 
+## Keystone's role
+
+Keystone is the point where the image gets technically organized before it is
+shown through a display transform. It is responsible for balance, tone,
+density behavior, gamut and neutral cleanup, and the safety checks that keep
+creative adjustments from turning into broken output. PresenceOFX comes before
+it; Referent, the look LUT, and the chart/QC tools come after it.
+
+Keystone does not replace the other stages. Keeping those stages separate makes
+it easier to see whether a problem comes from the camera transform, image
+character, balance, separation, display foundation, or look.
+
 ## What changed in v2.6.1
 
 ### Enlarger C / M / Y filtration
@@ -50,9 +62,9 @@ CST: camera -> AWG3 / LogC3
     -> PresenceOFX
     -> Keystone
     -> HB Color Separation DCTL
-    -> [Referent ODT](https://cullenkellycolor.com/toolkit/referent): LogC3 -> display space
+    -> Referent ODT: LogC3 -> display space
     -> Look LUT: display-referred look
-    -> [MonoNodes Chart DCTL](https://mononodes.com/dctls/): final chart / display QC
+    -> MonoNodes Chart DCTL: final chart / display QC
 ```
 
 The system boundary is deliberate: keep technical work in LogC3 until Keystone is complete, then use [Referent](https://cullenkellycolor.com/toolkit/referent), Cullen Kelly's free viewing LUT and display foundation, to move into display space before the look LUT and chart check. [MonoNodes](https://mononodes.com/dctls/) publishes DCTLs and workflow tools for colorists; the chart stage belongs at the end for display QC. HB Color Separation remains a separate creative stage; its paid license and support belong to Henry Bobeck, not this repository.
