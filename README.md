@@ -61,7 +61,7 @@ stages in a controlled order.
 
 ## Keystone's role in the system
 
-The connected system is documented in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html). Beginners can also use the [Resolve visual atlas](https://wbrisenold.github.io/KB-Tools/guides/resolve-visual-atlas.html) to see the real Color page before installing anything. Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools:
+The connected system is documented in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html). Beginners can start with the [Beginner Handbook](https://wbrisenold.github.io/KB-Tools/guides/beginner-handbook.html), then use the [Resolve visual atlas](https://wbrisenold.github.io/KB-Tools/guides/resolve-visual-atlas.html) to see the real Color page before installing anything. Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools:
 
 ```text
 Camera transform -> LogC3
@@ -85,13 +85,13 @@ purchase it from Henry and support its creator.
 
 ## Reference pictures
 
-![Blackmagic cinema camera](https://upload.wikimedia.org/wikipedia/commons/c/cc/Blackmagic_Cinema_Camera.JPG)
+![Blackmagic cinema camera](https://wbrisenold.github.io/KB-Tools/assets/images/resolve/camera.jpg)
 
 The camera is the source of the signal. Before Keystone can balance the image,
 the first CST must identify what the camera recorded, including whether it was
 Apple Log, Canon Log 3, ARRI LogC3, or another format.
 
-![ColorChecker chart](https://upload.wikimedia.org/wikipedia/commons/f/fa/Color_Checker.svg)
+![ColorChecker chart](https://wbrisenold.github.io/KB-Tools/assets/images/resolve/color-checker.svg)
 
 The ColorChecker is a neutral reference while setting white balance, exposure,
 density, and saturation. It does not replace a creative decision; it helps you
