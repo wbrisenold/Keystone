@@ -9,6 +9,33 @@ white balance, exposure, tone, density color, print behavior, gamut cleanup,
 and diagnostics. That separation lets you understand which decision changed
 the image.
 
+## Start here if you are new
+
+Keystone is the **make the picture dependable** part of the larger system. It is
+not the first thing you add, and it is not the final look. The beginner path is:
+
+1. Record or import a short clip. A supported phone can use Blackmagic Camera and may offer Apple Log.
+2. Open Resolve Studio and go to the Color page.
+3. Add the CST first so the camera file is translated into the working space.
+4. Add PresenceOFX if the image needs a little more shape or softness.
+5. Add Keystone and fix white balance, exposure, tone, and density.
+6. Add Referent and the look only after the picture is stable.
+
+![Resolve node editor](https://wbrisenold.github.io/KB-Tools/assets/images/resolve/nodes.jpg)
+
+**Analogy:** if PresenceOFX arranges the furniture, Keystone makes sure the
+floor is level and the lights work. Do not decorate the room before fixing the
+floor.
+
+If you do not know the words yet, use the [Beginner Handbook](https://wbrisenold.github.io/KB-Tools/guides/beginner-handbook.html). It explains phone setup, Log, exposure, nodes, CST, LUTs, and scopes in ordinary language before returning here for Keystone's controls.
+
+### How to add Keystone
+
+On the Color page, select a node, open **Effects Library** in the upper-right,
+search for **DCTL**, and place Keystone on its own node. If the DCTL does not
+appear, refresh Resolve's LUT list or restart Resolve. The node should stay
+easy to bypass so you can compare the picture with and without Keystone.
+
 ## Before you start
 
 You need **DaVinci Resolve Studio** to use this workflow as documented. You
