@@ -61,7 +61,7 @@ stages in a controlled order.
 
 ## Keystone's role in the system
 
-The connected system is documented in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html). Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools:
+The connected system is documented in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html). Beginners can also use the [Resolve visual atlas](https://wbrisenold.github.io/KB-Tools/guides/resolve-visual-atlas.html) to see the real Color page before installing anything. Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools:
 
 ```text
 Camera transform -> LogC3
