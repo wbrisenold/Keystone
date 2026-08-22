@@ -1,147 +1,285 @@
 # Keystone v2.6.1
 
-Keystone is the primary balance and tone stage in a small DaVinci Resolve system. It works in **ARRI Wide Gamut 3 / LogC3 EI800**, handling exposure, tone, white balance, gamut/neutral cleanup, density color, and technical finishing before the display transform.
+Keystone is a DaVinci Resolve DCTL for balancing and finishing an image in
+ARRI Wide Gamut 3 / LogC3 EI800. In beginner terms, it is the stage where you
+make the picture technically dependable before you add a display look.
 
-This is not a collection of unrelated nodes. The companion workflow uses CST for the camera transform, PresenceOFX for spatial image character, Keystone for technical balance, Henry Bobeck's paid [Color Separation DCTL](https://henrybobeck.com/dctl/ColorSeparation) for the dedicated separation stage, a Referent ODT, a display-referred look LUT, and MonoNodes charts for final display QC. The Color Separation DCTL is Henry Bobeck's product. If you use it, support its creator by purchasing it from the official page.
+Keystone is not a one-click film look. It gives you separate controls for
+white balance, exposure, tone, density color, print behavior, gamut cleanup,
+and diagnostics. That separation lets you understand which decision changed
+the image.
 
-## Keystone's role
+## Before you start
 
-Keystone is the point where the image gets technically organized before it is
-shown through a display transform. It is responsible for balance, tone,
-density behavior, gamut and neutral cleanup, and the safety checks that keep
-creative adjustments from turning into broken output. PresenceOFX comes before
-it; Referent, the look LUT, and the chart/QC tools come after it.
+You need **DaVinci Resolve Studio** to use this workflow as documented. You
+also need footage from a camera that can record a Log image, or a phone that
+offers a Log recording mode. Many people already have a usable Log camera in
+their pocket: a supported phone can record Apple Log when its camera app or
+capture workflow exposes that option. A cinema camera, mirrorless camera, or
+phone can all be the source; the important part is knowing which Log format was
+recorded.
 
-Keystone does not replace the other stages. Keeping those stages separate makes
-it easier to see whether a problem comes from the camera transform, image
-character, balance, separation, display foundation, or look.
+### What Log means
+
+Log is a way of storing a wide range of brightness values in a camera file.
+Instead of making the footage look finished in the camera, Log leaves room for
+bright skies, faces, and shadows to be shaped later. Straight out of the file,
+Log footage often looks gray, flat, or low contrast. That is normal. It is not
+the final image and it is not a sign that the footage is broken.
+
+Log is not one universal format. Apple Log, Canon Log 3, ARRI LogC3, and other
+formats use different curves and color primaries. The CST at the start of the
+tree must know what the camera recorded. Never select ARRI LogC3 just because
+the image looks flat; select it only when the source and transform are correct.
+
+The documented system converts the camera signal to ARRI Wide Gamut 3 / LogC3
+for the working stages. The connected workflow was tested on Apple Log and
+Canon Log 3 footage, but the exact CST settings still depend on the camera,
+recording mode, and project setup.
+
+### Why LogC3 is the working space here
+
+Keystone is authored around ARRI Wide Gamut 3 / LogC3 as a predictable,
+scene-referred working signal. The first CST translates the camera's native Log
+format into that common language, so Keystone can apply exposure, tone, density,
+print behavior, and cleanup without guessing which camera curve arrived at its
+input.
+
+The wide working gamut leaves room for creative changes before the display
+transform, and LogC3 gives the next Referent stage a known handoff. This does
+not make LogC3 the right space for every project. ACEScct, DaVinci Wide Gamut,
+or another managed space may be better elsewhere. Use LogC3 here because this
+tool, this node order, and this display handoff were designed together.
+
+## What is a DCTL?
+
+A DCTL is a small color-processing program that runs inside DaVinci Resolve.
+It appears as a tool in the Color page and can expose sliders, menus, and
+diagnostic views. A DCTL does not replace Resolve's node graph. It lives inside
+one node, which means you can bypass it, compare it, and place it next to other
+stages in a controlled order.
+
+## Keystone's role in the system
+
+The connected system is documented in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html). Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools:
+
+```text
+Camera transform -> LogC3
+    -> PresenceOFX: image character
+    -> Keystone: balance and technical finishing
+    -> Color Separation: creative color relationship
+    -> Referent: display foundation
+    -> Look LUT: local display look
+    -> MonoNodes: chart and display QC
+```
+
+The order matters. PresenceOFX can shape the image while it is still in the
+working space. Keystone then stabilizes exposure, tone, white balance, and
+range. After that, the image can move into display space and receive a look.
+Do not use a later look LUT to repair a bad input transform or an unstable
+balance.
+
+Henry Bobeck's [Color Separation DCTL](https://henrybobeck.com/dctl/ColorSeparation)
+is a separate paid product. It is not included in Keystone. If you use it,
+purchase it from Henry and support its creator.
+
+## Reference pictures
+
+![Blackmagic cinema camera](https://upload.wikimedia.org/wikipedia/commons/c/cc/Blackmagic_Cinema_Camera.JPG)
+
+The camera is the source of the signal. Before Keystone can balance the image,
+the first CST must identify what the camera recorded, including whether it was
+Apple Log, Canon Log 3, ARRI LogC3, or another format.
+
+![ColorChecker chart](https://upload.wikimedia.org/wikipedia/commons/f/fa/Color_Checker.svg)
+
+The ColorChecker is a neutral reference while setting white balance, exposure,
+density, and saturation. It does not replace a creative decision; it helps you
+separate a technical problem from a look choice.
+
+## What Keystone does internally
+
+The processing order is:
+
+```text
+Input repair
+-> Bradford white balance
+-> Scene exposure
+-> Soft black point
+-> Negative-space RGB printer trims
+-> LogC3 rolling contrast
+-> Shadows and highlights
+-> Rolloff
+-> H&D negative development and optional DIR
+-> Enlarger C/M/Y filtration and master print exposure
+-> Print H&D
+-> Density subtractive color
+-> Density look / split tone
+-> Safety guard
+-> White/black cleanup with skin protection
+-> Technical guards
+-> LogC3 EI800 output
+```
+
+You do not need to memorize this list to use the DCTL. It explains why the
+controls are grouped: balance happens before density and look behavior, and
+safety cleanup happens before the signal leaves Keystone.
+
+## How the image should feel
+
+Start by looking for stability, not style. A good neutral setup should give you
+a settled middle gray, cleaner neutrals, readable faces, and highlights that
+roll into place instead of snapping or collapsing. Once that foundation is
+working, the film controls can add density and color character without carrying
+the burden of basic correction.
+
+If the image becomes less stable when you move a creative control, return to
+the neutral state and solve the earlier problem first. Maximum slider values
+are not the goal. The useful result is an image that still has room for the
+separation and display stages that follow.
+
+## Controls in plain language
+
+### White balance and tint
+
+These controls settle neutral objects and unwanted green or magenta casts. Use
+them before judging a look. If a gray card, white wall, or neutral highlight is
+wrong, do not try to fix it with a color-separation slider.
+
+### Scene exposure
+
+Exposure moves the image as a whole. It should change where the image sits,
+not turn into a new contrast style. If exposure changes the mood too much,
+check the tone controls rather than pushing exposure harder.
+
+### Tone, shadows, highlights, and rolloff
+
+These controls decide how the image distributes contrast. Shadows should gain
+shape without becoming empty, highlights should retain a graceful transition,
+and rolloff should protect bright values without making the image dull. Move
+one tonal area at a time and compare against bypass.
+
+### Film Profile
+
+`Film / Profile` chooses a starting behavior such as Neutral, Latitude, Punch,
+or Chrome. These are authored response families, not claims to reproduce a
+named stock. The slider or menu exists so you can choose a broad direction
+before making smaller trims.
+
+### Film Strength
+
+`Film / Strength` scales the film-related response: development behavior, DIR,
+print exposure, C/M/Y filtration, subtractive color, and split/look density.
+It does not change white balance, scene exposure, basic contrast, shadows,
+highlights, rolloff, or output cleanup. That boundary keeps the control useful:
+you can reduce the film character without undoing the technical balance.
+
+### Print C/M/Y and master print exposure
+
+The C, M, and Y filtration controls behave like explicit printer decisions.
+They change color density through the print stage rather than acting like a
+generic RGB saturation knob. Master print exposure changes the print brightness
+inside that same model. Keep these controls subtle until the neutral image is
+already working.
+
+### Density look and split tone
+
+Presets provide a starting relationship between shadows and highlights. The
+pivot is protected so the preset does not silently tint the middle gray. Use
+the manual shadow and highlight trims when the broad preset is close but not
+right for the shot.
+
+### Color / Dye and Pos Sat
+
+These controls change density behavior and saturation behavior separately. Dye
+is about how color behaves inside the density model. Pos Sat is a more direct
+saturation response in the LogC3-encoded working signal. If the image starts
+to look painted, reduce these before changing the display LUT.
+
+### View / Mode
+
+Diagnostics include Result, Neutral Chroma, Density, Gamut Stress, and Skin
+Mask views. Use them to see where a control is acting. The diagnostic views are
+especially useful when a slider looks attractive in one part of the frame but
+creates unwanted color or range problems elsewhere.
 
 ## What changed in v2.6.1
 
-### Enlarger C / M / Y filtration
+Version 2.6.1 keeps the matrix-free photochemical core, print-stage C/M/Y
+filtration, and density-look presets. It replaces the artifact-prone density
+subtractive-saturation control with Primera Suite Pos Sat behavior.
 
-`Print / C CC`, `Print / M CC`, and `Print / Y CC` live between the negative and print stages. The source convention is Kodak CC optical-density units: **100 CC = 1.0 density = 10% transmission**. Keystone translates positive C/M/Y to reduced red/green/blue print exposure respectively. The controls are neutral at 0 and require Film Response to be active.
+It also includes the stability correction that withdraws v2.6.0 and rebuilds
+the density-domain hardening from v2.5.1 with helper declarations and runtime
+clamps matched to the UI ranges.
 
-### Density-look presets
+## Installation and validation
 
-`Split / Preset` and `Split / Preset Amt` feed directly into Keystone's density split-tone engine. Manual `Split / Sh R/G/B` and `Split / Hi R/G/B` remain available as trims on top of the preset. The pivot remains untouched by construction, so using a preset does not silently tint the protected middle-gray zone.
+The repository contains `Keystone.dctl` and the project license. Install the
+DCTL using Resolve's normal LUT/DCTL workflow, then refresh the LUT list or
+restart Resolve if the tool does not appear.
 
-The first ten presets preserve a warm/cool shadow/highlight intent while translating the look into density offsets instead of running a separate three-zone Oklab engine:
+Run the repository checks with:
 
-- Warm Cool
-- Cool Warm
-- Amber Cyan
-- Cyan Amber
-- Olive Cream
-- Teal Orange
-- Warm Vintage
-- Cool Silver
-- Sodium Cyan
-- Moonlight Warm Skin
-
-Additional Keystone-authored familiar tone families are:
-
-- Sepia
-- Bleach Cool
-- Golden Hour
-- Dusk Purple
-- Tobacco Teal
-
-These are creative starting points, not claims of matching a named film stock, lab process, or commercial LUT.
-
-## Processing order
-
-Input repair -> Bradford WB -> scene exposure -> soft black point -> negative-space RGB printer trims -> LogC3 rolling contrast -> shadows/highlights -> rolloff -> H&D negative development + optional DIR -> enlarger C/M/Y filtration + master print exposure -> print H&D -> density subtractive color -> density look/split tone -> Safe guard -> white/black cleanup with skin protection -> technical guards -> LogC3 EI800.
-
-## Current Resolve workflow
-
-Keystone sits after [PresenceOFX](https://github.com/wbrisenold/PresenceOFX) and before the display-side tools. The complete system map, including CST, Henry Bobeck's Color Separation DCTL, Referent, the look LUT, and MonoNodes, lives in the [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html).
-
-```text
-LogC3 working image
-    -> PresenceOFX
-    -> Keystone
-    -> Referent / display-side tools
+```bash
+python3 tools/validate.py Keystone.dctl
 ```
 
-The system boundary is deliberate: keep technical work in LogC3 until Keystone is complete, then use [Referent](https://cullenkellycolor.com/toolkit/referent), Cullen Kelly's free viewing LUT and display foundation, to move into display space before the look LUT and chart check. [MonoNodes](https://mononodes.com/dctls/) publishes DCTLs and workflow tools for colorists; the chart stage belongs at the end for display QC. HB Color Separation remains a separate creative stage; its paid license and support belong to Henry Bobeck, not this repository.
+The repository's current validation script checks DCTL structure and supported
+source patterns. GitHub Actions runs the same command on pushes and releases.
+The final compatibility check still belongs in the exact Resolve Studio version,
+GPU, project color management, and monitoring setup where you will use Keystone.
 
-Read the [Keystone section of the system guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html#what-each-stage-is-doing) for the grading behavior of the surrounding stages. This README stays focused on what Keystone changes and how its controls respond.
+## Learn the surrounding ideas
 
-## Film controls
+- [Blackmagic Design Color training](https://www.blackmagicdesign.com/products/davinciresolve/training) — official beginner lessons for the Color page, scopes, and color management.
+- [Cullen Kelly Color](https://www.youtube.com/@CullenKellyColor) — scene-referred grading and display-transform education.
+- [Cullen Kelly Referent search](https://www.youtube.com/results?search_query=Cullen+Kelly+Referent+LUT) — Referent-specific tutorials and current usage examples.
+- [KB Tools node guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html) — the complete connected chain and exact node order.
 
-`Film / Profile` selects Neutral, Latitude, Punch, or Chrome behavioral H&D families. These are family shapes, not commercial stock matches. `Film / Print M` is the master printer exposure in printer points, where one point is 0.025 log10 exposure. `Film / DIR` controls non-spatial inter-layer inhibitor behavior. `Color / Pos Sat` uses Primera Suite's positive HSV saturation behavior in LogC3-encoded AWG3; `Color / Dye` remains the independent density-domain dye-coupling control.
+Use the general lessons to understand grading. Use this README to understand
+what Keystone owns: neutral balance, tone, density, film response, gamut
+cleanup, and diagnostics. PresenceOFX comes before it; Referent, the Look LUT,
+and MonoNodes come after it.
 
-`Film / Strength` scales Film Response, DIR, master print exposure, C/M/Y filtration, subtractive color, and split/look density offsets. It does not change WB, scene exposure, contrast, shadows/highlights, rolloff, or output cleanup.
+## Testing and limitations
 
-## How it feels in a grade
+This project was vibe coded with human direction and AI assistance. The source,
+licenses, tests, packaging, and validation steps were reviewed and organized
+around repeatable checks, but generated code can still contain mistakes or
+host-specific problems.
 
-Keystone is designed to make a shot feel organized before it feels stylized.
-The first useful change is usually a more stable middle gray, cleaner neutral
-areas, and a smoother relationship between shadows, faces, and highlights. The
-film controls can add density and color behavior after that foundation is
-working, but they are not meant to hide a bad exposure or a mismatched input
-transform.
+The connected workflow was tested on Apple Log and Canon Log 3 footage. Those
+tests describe the author's setup, not universal support for every camera,
+input transform, GPU, Resolve version, or monitoring pipeline. Before paid or
+archival work, test the DCTL in the exact Resolve environment where it will be
+used.
 
-The important control groups have distinct jobs:
+## Credits and license
 
-| Control group | What you feel | Why it exists |
-|---|---|---|
-| White balance / tint | Neutrals settle and skin stops drifting toward an unwanted cast. | Balance belongs before creative density and look decisions. |
-| Scene exposure | The image moves as a whole without changing the character of the contrast curve. | Exposure should not be confused with a look. |
-| Tone / highlights | Shadows gain shape and highlights open or compress with a controlled transition. | Separate tonal controls preserve more intent than one contrast knob. |
-| Film Profile | The response shifts between cleaner, denser, punchier, or more chrome-like families. | Profiles provide a starting behavior without claiming to match a commercial stock. |
-| Film Strength | The film response moves from barely present to clearly visible. | It scales the film-related group without unexpectedly changing balance or cleanup. |
-| Print C/M/Y and exposure | Color density and print exposure move with a printer-like feel. | These controls make the print-stage decisions explicit instead of burying them in a look preset. |
-| Split preset / amount | A shadow and highlight relationship appears without silently recoloring the pivot. | Presets are starting points; manual trims remain available for the shot. |
-| Color / Dye and Pos Sat | Color density becomes more subtractive or more saturated. | The controls separate density behavior from simple RGB saturation. |
-| View / Mode | You can inspect neutral chroma, density, gamut stress, or skin protection. | Diagnostics turn a subjective adjustment into something you can check. |
+Keystone combines original integration work with openly available color-science
+code and ideas. Attribution is also recorded in `THIRD_PARTY_NOTICES.md`.
 
-If a slider makes the image feel less stable, return to the neutral state and
-solve the earlier stage first. Keystone's useful ceiling is not maximum
-intensity; it is a technical image that still leaves room for the creative
-stages after it.
+- [Speak](https://github.com/amateurmenace/Speak): H&D negative/print curves, profiles, printer points, density color, dye coupling, and split-tone foundations.
+- [spektrafilm](https://github.com/andreavolpato/spektrafilm): DIR development behavior and enlarger filtration conventions.
+- [Primera Suite](https://github.com/geoffsmithBK/primera-suite): black-point and rolling-contrast behavior retained from earlier development.
+- [Thatcher Freeman utility-dctls](https://github.com/thatcherfreeman/utility-dctls): reference work for tone-scale and DCTL development.
+- [ACES Reference Gamut Compression](https://github.com/ampas/aces-vwg-gamut-mapping-2020): optional gamut-repair reference.
+- [Photographic DCTLs](https://github.com/mikaelsundell/photographic-dctls), [Uffy PhotoChemical Look Process](https://github.com/RichardUffy/Uffy-PhotoChemical-Look-Process-for-DaVinci-Resolve-Studio), [Kodak2383 Emulation](https://github.com/lakravana/Kodak2383_Emulation), and [Dec. 18 Studios](https://github.com/Dec18studios): reviewed workflow and research references.
+- [Henry Bobeck Color Separation](https://henrybobeck.com/dctl/ColorSeparation): separate downstream creative tool, not incorporated into Keystone.
 
-## Diagnostics
+Keystone is distributed under **GPL-3.0-only** because GPLv3-covered source is
+incorporated into the combined work. No spektrafilm stock profile or LUT
+database assets are bundled.
 
-`View / Mode` provides Result, Neutral Chroma, Density, Gamut Stress, and Skin Mask views.
+### Visual references
 
-## Credits and upstream sources
+- [Blackmagic Cinema Camera](https://commons.wikimedia.org/wiki/File:Blackmagic_Cinema_Camera.JPG) — MMuzammils, CC BY-SA 3.0.
+- [Color Checker SVG](https://commons.wikimedia.org/wiki/File:Color_Checker.svg) — Glrx, CC0/Public Domain Dedication.
 
-Keystone combines original integration work with openly available color-science code and ideas. Upstream names are intentionally kept out of the DCTL implementation itself; attribution is explicit here and in `THIRD_PARTY_NOTICES.md`.
+## Further reading
 
-### Incorporated or directly adapted
-
-- **Speak** — H&D negative/print curve model, behavioral profile families, printer-point convention, density-domain subtractive color, dye coupling, and density split-toning foundations. GitHub: https://github.com/amateurmenace/Speak
-- **spektrafilm** by Andrea Volpato — DIR donor/receiver development model, DIR source defaults and pre-correction concept, and enlarger CC filtration convention. GitHub: https://github.com/andreavolpato/spektrafilm
-- **Primera Suite** by Geoff Smith — black-point and rolling-contrast behavior retained from earlier Keystone development. GitHub: https://github.com/geoffsmithBK/primera-suite
-- **Thatcher Freeman utility-dctls** — reference work used during earlier tone-scale and DCTL development. GitHub: https://github.com/thatcherfreeman/utility-dctls
-- **ACES 1.3 Reference Gamut Compression** — optional input gamut-repair reference implementation. GitHub: https://github.com/ampas/aces-vwg-gamut-mapping-2020
-
-### Reviewed or workflow references
-
-- **Photographic DCTLs** by Mikael Sundell — previous film-matrix research reference; the fixed matrix remains removed. GitHub: https://github.com/mikaelsundell/photographic-dctls
-- **Uffy PhotoChemical Look Process** — workflow/component reference only. GitHub: https://github.com/RichardUffy/Uffy-PhotoChemical-Look-Process-for-DaVinci-Resolve-Studio
-- **Kodak2383_Emulation** — research reference only; no implementation copied. GitHub: https://github.com/lakravana/Kodak2383_Emulation
-- **Dec. 18 Studios** — Film Negative Space workflow/reference influence during earlier development. GitHub: https://github.com/Dec18studios
-- **HB Color Separation DCTL** — used as a separate downstream color-separation stage in the recommended Resolve workflow. It is not incorporated into Keystone.
-
-Keystone is distributed under **GPL-3.0-only** because GPLv3-covered source is incorporated into the combined work. No spektrafilm stock profile/LUT database assets are bundled.
-
-## Vibe-coded disclosure
-
-**This entire Keystone project was vibe coded.** The DCTL, math translations, integration decisions, creative preset translations, refactors, validation scripts, documentation, packaging, and release automation were produced through iterative human-directed AI coding. Source files and licenses were reviewed and credited, but AI-generated code can still contain mistakes, mistranslations, edge cases, or host-specific issues. The project is provided without a warranty of correctness, fitness, or production safety; users remain responsible for validating it in their own Resolve environment and on their own material.
-
-The connected workflow was tested on footage recorded in Apple Log and Canon Log 3. Those tests document the author's working setup; they are not a guarantee that every camera, CST configuration, GPU, or Resolve version will behave identically.
-
-## Production status
-
-v2.6.1 is code- and package-hardened: all exposed controls have hover help, new features default to identity, matrix code remains absent, filtration placement is explicit, numerical guards remain in place, and release metadata/validators cover the new modules. Resolve host/runtime testing is intentionally outside this preparation pass.
-
-### Camera UV/IR note
-
-Keystone intentionally does not expose camera UV/IR filters. The upstream operation changes wavelength-resolved film sensitivity before film exposure; a three-channel RGB DCTL cannot reproduce that faithfully. Use a spectral film simulator for this stage.
-
-
-## v2.6.1 stability correction
-v2.6.0 is withdrawn. v2.6.1 rebuilds the density-domain hardening from v2.5.1 with all helper functions declared before use and runtime clamps matched to their UI ranges.
+- [KB Tools system guide](https://wbrisenold.github.io/KB-Tools/guides/resolve-node-guide.html)
+- [PresenceOFX](https://github.com/wbrisenold/PresenceOFX), the preceding image-character stage
+- [Cullen Kelly Referent](https://cullenkellycolor.com/toolkit/referent), the free display foundation
+- [MonoNodes DCTLs](https://mononodes.com/dctls/), the chart and workflow-tool source
