@@ -75,6 +75,34 @@ The system boundary is deliberate: keep technical work in LogC3 until Keystone i
 
 `Film / Strength` scales Film Response, DIR, master print exposure, C/M/Y filtration, subtractive color, and split/look density offsets. It does not change WB, scene exposure, contrast, shadows/highlights, rolloff, or output cleanup.
 
+## How it feels in a grade
+
+Keystone is designed to make a shot feel organized before it feels stylized.
+The first useful change is usually a more stable middle gray, cleaner neutral
+areas, and a smoother relationship between shadows, faces, and highlights. The
+film controls can add density and color behavior after that foundation is
+working, but they are not meant to hide a bad exposure or a mismatched input
+transform.
+
+The important control groups have distinct jobs:
+
+| Control group | What you feel | Why it exists |
+|---|---|---|
+| White balance / tint | Neutrals settle and skin stops drifting toward an unwanted cast. | Balance belongs before creative density and look decisions. |
+| Scene exposure | The image moves as a whole without changing the character of the contrast curve. | Exposure should not be confused with a look. |
+| Tone / highlights | Shadows gain shape and highlights open or compress with a controlled transition. | Separate tonal controls preserve more intent than one contrast knob. |
+| Film Profile | The response shifts between cleaner, denser, punchier, or more chrome-like families. | Profiles provide a starting behavior without claiming to match a commercial stock. |
+| Film Strength | The film response moves from barely present to clearly visible. | It scales the film-related group without unexpectedly changing balance or cleanup. |
+| Print C/M/Y and exposure | Color density and print exposure move with a printer-like feel. | These controls make the print-stage decisions explicit instead of burying them in a look preset. |
+| Split preset / amount | A shadow and highlight relationship appears without silently recoloring the pivot. | Presets are starting points; manual trims remain available for the shot. |
+| Color / Dye and Pos Sat | Color density becomes more subtractive or more saturated. | The controls separate density behavior from simple RGB saturation. |
+| View / Mode | You can inspect neutral chroma, density, gamut stress, or skin protection. | Diagnostics turn a subjective adjustment into something you can check. |
+
+If a slider makes the image feel less stable, return to the neutral state and
+solve the earlier stage first. Keystone's useful ceiling is not maximum
+intensity; it is a technical image that still leaves room for the creative
+stages after it.
+
 ## Diagnostics
 
 `View / Mode` provides Result, Neutral Chroma, Density, Gamut Stress, and Skin Mask views.
