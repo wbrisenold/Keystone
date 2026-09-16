@@ -26,7 +26,7 @@ static bool initMetal(id<MTLCommandQueue> q){
   if(gState.ready&&gState.device==d)return true; gState=MetalState{};gState.device=d;NSError* err=nil;NSURL* u=metallibURL();if(!u)return false;
   gState.library=[d newLibraryWithURL:u error:&err];if(!gState.library)return false;id<MTLFunction> f=[gState.library newFunctionWithName:@"keystoneKernel"];if(!f)return false;
   gState.pipeline=[d newComputePipelineStateWithFunction:f error:&err];if(!gState.pipeline)return false;
-  std::vector<LutEntry> lut;std::string why;if(!loadCube33(bundledOutputTransformPath(),lut,&why)||lut.size()!=35937)return false;
+  std::vector<LutEntry> lut;std::string why;if(!loadCube33(bundledReferentPath(),lut,&why)||lut.size()!=35937)return false;
   gState.lut=[d newBufferWithBytes:lut.data() length:lut.size()*sizeof(LutEntry) options:MTLResourceStorageModeShared];if(!gState.lut)return false;
   gState.ready=true;return true;
 }

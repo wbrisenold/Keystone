@@ -20,17 +20,17 @@ bool loadCube33(const std::string& path,std::vector<LutEntry>& out,std::string* 
   if(size!=33||tmp.size()!=35937){if(error){std::ostringstream s;s<<"expected 33^3 LUT (35937 nodes), got size="<<size<<" nodes="<<tmp.size();*error=s.str();}return false;}
   out.swap(tmp); return true;
 }
-std::string bundledOutputTransformPath(){
-  if(const char* e=std::getenv("KEYSTONE_OUTPUT_LUT"))return e;
+std::string bundledReferentPath(){
+  if(const char* e=std::getenv("KEYSTONE_REFERENT_LUT"))return e;
 #ifdef __APPLE__
-  Dl_info info{}; if(dladdr((const void*)&bundledOutputTransformPath,&info)&&info.dli_fname){
+  Dl_info info{}; if(dladdr((const void*)&bundledReferentPath,&info)&&info.dli_fname){
     std::string p=info.dli_fname; auto slash=p.find_last_of('/'); if(slash!=std::string::npos){
       p=p.substr(0,slash); // Contents/MacOS
-      slash=p.find_last_of('/'); if(slash!=std::string::npos) p=p.substr(0,slash)+"/Resources/Keystone_Output_LogC4_to_Rec709.cube";
+      slash=p.find_last_of('/'); if(slash!=std::string::npos) p=p.substr(0,slash)+"/Resources/Referent_LogC4_to_Rec709.cube";
       return p;
     }
   }
 #endif
-  return "resources/Keystone_Output_LogC4_to_Rec709.cube";
+  return "resources/Referent_LogC4_to_Rec709.cube";
 }
 }

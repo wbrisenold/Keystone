@@ -3,37 +3,37 @@ __DEVICE__ float3 mmul(float3 c0,float3 c1,float3 c2,float3 v){return make_float
 __DEVICE__ int finitef(float x){return (x==x&&_fabs(x)<3.402823e38f)?1:0;}
 __DEVICE__ float cbrt_s(float x){return(x<0.0f?-1.0f:1.0f)*_powf(_fabs(x),1.0f/3.0f);}
 __DEVICE__ float smootherstep(float e0,float e1,float x){float span=e1-e0;if(span<=1.0e-12f)return x>=e1?1.0f:0.0f;x=clampf((x-e0)/span,0.0f,1.0f);return x*x*x*(x*(x*6.0f-15.0f)+10.0f);}
-// ---- Keystone 2.1.6 procedural color core (recovered from uploaded OFX) ----
+// ---- Contour 2.1.6 procedural color core (recovered from uploaded OFX) ----
 // Only image-processing math used by Density, Split Saturation, and Split Toning is ported.
 // The plugin's 65^3 LUT export/cube renderer, graph overlays, watermarking, and host plumbing are omitted.
-#define keystone_PI 3.14159265358979323846f
-#define keystone_TAU 6.28318530717958647692f
+#define CONTOUR_PI 3.14159265358979323846f
+#define CONTOUR_TAU 6.28318530717958647692f
 
-__DEVICE__ float keystone_tone_dvi_to_lin(float in){
+__DEVICE__ float contour_dvi_to_lin(float in){
   return in>0.02740668f?_powf(2.0f,(in/0.07329248f)-7.0f)-0.0075f:in/10.44426855f;
 }
-__DEVICE__ float keystone_tone_lin_to_dvi(float in){
+__DEVICE__ float contour_lin_to_dvi(float in){
   return in>0.00262409f?(_log2f(in+0.0075f)+7.0f)*0.07329248f:in*10.44426855f;
 }
-__DEVICE__ float3 keystone_tone_lin_to_dvi3(float3 v){return make_float3(keystone_tone_lin_to_dvi(v.x),keystone_tone_lin_to_dvi(v.y),keystone_tone_lin_to_dvi(v.z));}
-__DEVICE__ float3 keystone_tone_dvi_to_lin3(float3 v){return make_float3(keystone_tone_dvi_to_lin(v.x),keystone_tone_dvi_to_lin(v.y),keystone_tone_dvi_to_lin(v.z));}
-__DEVICE__ float3 keystone_tone_clamp01_3(float3 v){return make_float3(clampf(v.x,0.0f,1.0f),clampf(v.y,0.0f,1.0f),clampf(v.z,0.0f,1.0f));}
-__DEVICE__ float keystone_tone_sign(float x){return x>0.0f?1.0f:(x<0.0f?-1.0f:0.0f);}
-__DEVICE__ float keystone_tone_spow(float a,float b){return keystone_tone_sign(a)*_powf(_fabs(a),b);}
+__DEVICE__ float3 contour_lin_to_dvi3(float3 v){return make_float3(contour_lin_to_dvi(v.x),contour_lin_to_dvi(v.y),contour_lin_to_dvi(v.z));}
+__DEVICE__ float3 contour_dvi_to_lin3(float3 v){return make_float3(contour_dvi_to_lin(v.x),contour_dvi_to_lin(v.y),contour_dvi_to_lin(v.z));}
+__DEVICE__ float3 contour_clamp01_3(float3 v){return make_float3(clampf(v.x,0.0f,1.0f),clampf(v.y,0.0f,1.0f),clampf(v.z,0.0f,1.0f));}
+__DEVICE__ float contour_sign(float x){return x>0.0f?1.0f:(x<0.0f?-1.0f:0.0f);}
+__DEVICE__ float contour_spow(float a,float b){return contour_sign(a)*_powf(_fabs(a),b);}
 
-__DEVICE__ float keystone_tone_normalize_gain(float hue,float chroma){
-  float angle=hue*keystone_TAU-keystone_PI/6.0f;
+__DEVICE__ float contour_normalize_gain(float hue,float chroma){
+  float angle=hue*CONTOUR_TAU-CONTOUR_PI/6.0f;
   (void)chroma;
   return 1.0f/(2.0f*_cosf((_acosf(_sinf(3.0f*angle)))/3.0f));
 }
 
-// Keystone rgb_to_subChenYCH / RGB_to_NormSpherical(nonorm): x=norm, y=cone chroma, z=hue turns.
-__DEVICE__ float3 keystone_tone_rgb_to_subchen(float3 in){
+// Contour rgb_to_subChenYCH / RGB_to_NormSpherical(nonorm): x=norm, y=cone chroma, z=hue turns.
+__DEVICE__ float3 contour_rgb_to_subchen(float3 in){
   float norm=_fmaxf(in.x,_fmaxf(in.y,in.z));
   float rx=0.8164965809277260f*in.x-0.4082482904638630f*in.y-0.4082482904638630f*in.z;
   float ry=0.7071067811865475f*in.y-0.7071067811865475f*in.z;
   float rz=0.5773502691896258f*(in.x+in.y+in.z);
-  float theta=_atan2f(ry,rx)/keystone_TAU;
+  float theta=_atan2f(ry,rx)/CONTOUR_TAU;
   float hue=theta<0.0f?theta+1.0f:theta;
   float chroma=_atan2f(_sqrtf(rx*rx+ry*ry),rz)/_atan2f(_sqrtf(2.0f),1.0f);
   if(chroma<0.0001f&&chroma>0.0f)hue=0.0f;
@@ -41,19 +41,19 @@ __DEVICE__ float3 keystone_tone_rgb_to_subchen(float3 in){
   return make_float3(norm,chroma,hue);
 }
 
-__DEVICE__ float3 keystone_tone_subchen_to_rgb(float3 v){
+__DEVICE__ float3 contour_subchen_to_rgb(float3 v){
   // source stores [norm,chroma,hue], then swaps norm/hue before reconstruction
   float hue=v.z,chroma=v.y,norm=v.x;
   float hue2=hue+0.5f;
-  float cg1=keystone_tone_normalize_gain(hue,chroma);
-  float cg2=keystone_tone_normalize_gain(hue2,chroma);
+  float cg1=contour_normalize_gain(hue,chroma);
+  float cg2=contour_normalize_gain(hue2,chroma);
   float y=_tanf(chroma*_atan2f(_sqrtf(2.0f),1.0f))/_sqrtf(2.0f);
   y/=cg1;
   float ng=(cg2+cg1*y)/cg2;
   norm/=ng;
   y*=cg1;
-  float rx=_cosf(hue*keystone_TAU)*y*norm*_sqrtf(3.0f)/(_sqrtf(2.0f)/2.0f);
-  float ry=_sinf(hue*keystone_TAU)*y*norm*_sqrtf(3.0f)/(_sqrtf(2.0f)/2.0f);
+  float rx=_cosf(hue*CONTOUR_TAU)*y*norm*_sqrtf(3.0f)/(_sqrtf(2.0f)/2.0f);
+  float ry=_sinf(hue*CONTOUR_TAU)*y*norm*_sqrtf(3.0f)/(_sqrtf(2.0f)/2.0f);
   float rz=norm*_sqrtf(3.0f);
   return make_float3(
     0.8164965809277260f*rx+0.5773502691896258f*rz,
@@ -61,10 +61,10 @@ __DEVICE__ float3 keystone_tone_subchen_to_rgb(float3 v){
    -0.4082482904638630f*rx-0.7071067811865475f*ry+0.5773502691896258f*rz);
 }
 
-__DEVICE__ float3 keystone_tone_chen_to_rgb(float3 sph){
+__DEVICE__ float3 contour_chen_to_rgb(float3 sph){
   float r=sph.x*1.7320508075688772f;
   float p=sph.y*0.9553166181245093f;
-  float t=sph.z*keystone_TAU;
+  float t=sph.z*CONTOUR_TAU;
   float ctr=r*_sinf(p)*_cosf(t);
   float ctg=r*_sinf(p)*_sinf(t);
   float ctb=r*_cosf(p);
@@ -74,81 +74,81 @@ __DEVICE__ float3 keystone_tone_chen_to_rgb(float3 sph){
     ctr*-0.40824829f+ctg*-0.70710678f+ctb*0.57735027f);
 }
 
-__DEVICE__ float keystone_tone_bez4(float in,float y1,float y2,float y3,float y4){
+__DEVICE__ float contour_bez4(float in,float y1,float y2,float y3,float y4){
   float om=1.0f-in;
   return y1*om*om*om+3.0f*y2*om*om*in+3.0f*y3*om*in*in+y4*in*in*in;
 }
-__DEVICE__ float keystone_tone_bez_mask(float in,float threshold,float delta){
+__DEVICE__ float contour_bez_mask(float in,float threshold,float delta){
   float x1=threshold,x2=threshold+delta;
   if(in<x1)return 1.0f;
   if(in>x2)return 0.0f;
   if(_fabs(delta)<=1.0e-12f)return in<=x1?1.0f:0.0f;
   float y1=(1.0f-x1)/delta,y2=(1.0f-x1)/delta,y3=(0.0f-x1)/delta,y4=(0.0f-x1)/delta;
   float t=(in-x1)/delta;
-  return keystone_tone_bez4(t,y1,y2,y3,y4)*delta+x1;
+  return contour_bez4(t,y1,y2,y3,y4)*delta+x1;
 }
-__DEVICE__ float keystone_tone_bell_mask(float in,float center,float width,float strength,float curveEase){
+__DEVICE__ float contour_bell_mask(float in,float center,float width,float strength,float curveEase){
   float out=0.0f;
   float c=center,left=c-width*0.5f,right=c+width*0.5f;
-  if(in>left&&in<right)out+=keystone_tone_spow(_sinf(keystone_PI*((c-in-width*0.5f)/width)),curveEase)*strength;
-  if(left<0.0f){c=center+1.0f;left=c-width*0.5f;right=c+width*0.5f;if(in>left&&in<right)out+=keystone_tone_spow(_sinf(keystone_PI*((c-in-width*0.5f)/width)),curveEase)*strength;}
-  if(center+width*0.5f>1.0f){c=center-1.0f;left=c-width*0.5f;right=c+width*0.5f;if(in>left&&in<right)out+=keystone_tone_spow(_sinf(keystone_PI*((c-in-width*0.5f)/width)),curveEase)*strength;}
+  if(in>left&&in<right)out+=contour_spow(_sinf(CONTOUR_PI*((c-in-width*0.5f)/width)),curveEase)*strength;
+  if(left<0.0f){c=center+1.0f;left=c-width*0.5f;right=c+width*0.5f;if(in>left&&in<right)out+=contour_spow(_sinf(CONTOUR_PI*((c-in-width*0.5f)/width)),curveEase)*strength;}
+  if(center+width*0.5f>1.0f){c=center-1.0f;left=c-width*0.5f;right=c+width*0.5f;if(in>left&&in<right)out+=contour_spow(_sinf(CONTOUR_PI*((c-in-width*0.5f)/width)),curveEase)*strength;}
   return out;
 }
 
-// Keystone Density with its default Focus=50 and equal complementary hue weighting (50/50).
-// Working transfer is DaVinci Intermediate because those are Keystone's recovered DVI hue centers.
-__DEVICE__ float3 ks_apply_keystone_tone_density(float3 lin,float amount){
+// Contour Density with its default Focus=50 and equal complementary hue weighting (50/50).
+// Working transfer is DaVinci Intermediate because those are Contour's recovered DVI hue centers.
+__DEVICE__ float3 ks_apply_contour_density(float3 lin,float amount){
   float a=clampf(amount,0.0f,1.0f);
   if(a<=1.0e-8f)return lin;
-  float3 dvi_orig=keystone_tone_lin_to_dvi3(lin);
-  float3 dvi=keystone_tone_clamp01_3(dvi_orig);
-  float3 lin_base=keystone_tone_dvi_to_lin3(dvi);
-  float3 logCyl=keystone_tone_rgb_to_subchen(dvi);
-  float3 linCyl=keystone_tone_rgb_to_subchen(keystone_tone_clamp01_3(lin_base));
+  float3 dvi_orig=contour_lin_to_dvi3(lin);
+  float3 dvi=contour_clamp01_3(dvi_orig);
+  float3 lin_base=contour_dvi_to_lin3(dvi);
+  float3 logCyl=contour_rgb_to_subchen(dvi);
+  float3 linCyl=contour_rgb_to_subchen(contour_clamp01_3(lin_base));
   float focus=0.5f;
-  float satPow=4.0f*focus+1.5f*(1.0f-focus); // 2.75 at Keystone default Focus 50
+  float satPow=4.0f*focus+1.5f*(1.0f-focus); // 2.75 at Contour default Focus 50
   float satMask=_powf(clampf(linCyl.y,0.0f,1.0f),satPow);
   const float w=120.0f/360.0f, ease=2.0f;
   const float cR=2.0f/360.0f,cM=288.0f/360.0f,cB=230.0f/360.0f,cC=164.0f/360.0f,cG=100.0f/360.0f,cY=54.0f/360.0f;
   float hueMask=0.5f*(
-    keystone_tone_bell_mask(logCyl.z,cR,w,-1.0f,ease)+keystone_tone_bell_mask(logCyl.z,cM,w,-1.0f,ease)+
-    keystone_tone_bell_mask(logCyl.z,cB,w,-1.0f,ease)+keystone_tone_bell_mask(logCyl.z,cC,w,-1.0f,ease)+
-    keystone_tone_bell_mask(logCyl.z,cG,w,-1.0f,ease)+keystone_tone_bell_mask(logCyl.z,cY,w,-1.0f,ease));
+    contour_bell_mask(logCyl.z,cR,w,-1.0f,ease)+contour_bell_mask(logCyl.z,cM,w,-1.0f,ease)+
+    contour_bell_mask(logCyl.z,cB,w,-1.0f,ease)+contour_bell_mask(logCyl.z,cC,w,-1.0f,ease)+
+    contour_bell_mask(logCyl.z,cG,w,-1.0f,ease)+contour_bell_mask(logCyl.z,cY,w,-1.0f,ease));
   float netMask=clampf(satMask*hueMask,0.0f,1.0f);
-  float densityGain=(1.0f-a)*0.89f+0.11f; // exact Keystone mapping of 0..100 -> 1..0.11
+  float densityGain=(1.0f-a)*0.89f+0.11f; // exact Contour mapping of 0..100 -> 1..0.11
   float3 dense_lin=lin_base*make_float3(densityGain,densityGain,densityGain);
-  float3 dense_dvi=keystone_tone_lin_to_dvi3(dense_lin);
+  float3 dense_dvi=contour_lin_to_dvi3(dense_lin);
   float3 candidate=dense_dvi*make_float3(netMask,netMask,netMask)+dvi*make_float3(1.0f-netMask,1.0f-netMask,1.0f-netMask);
-  // Preserve Keystone's extended-range carrier: inside [0,1] this is exact Keystone behavior;
-  // outside it, apply only the Keystone delta rather than clipping the base signal.
+  // Preserve Keystone's extended-range carrier: inside [0,1] this is exact Contour behavior;
+  // outside it, apply only the Contour delta rather than clipping the base signal.
   float3 out_dvi=dvi_orig+(candidate-dvi);
-  return keystone_tone_dvi_to_lin3(out_dvi);
+  return contour_dvi_to_lin3(out_dvi);
 }
 
-// Recovered Keystone Split Saturation. UI satGain is kept in the source's 0.5..2 domain; 1 bypasses.
-__DEVICE__ float3 ks_apply_keystone_tone_split_sat(float3 lin,float satGain){
+// Recovered Contour Split Saturation. UI satGain is kept in the source's 0.5..2 domain; 1 bypasses.
+__DEVICE__ float3 ks_apply_contour_split_sat(float3 lin,float satGain){
   float g=clampf(satGain,0.5f,2.0f);
   if(_fabs(g-1.0f)<=1.0e-8f)return lin;
   const float pivot_ui=0.5f,ratio=0.5f;
   float d=g-1.0f;
-  float loGain=1.0f+keystone_tone_sign(d)*_fabs(d)*(1.0f-ratio);
-  float hiGain=1.0f+keystone_tone_sign(d)*_fabs(d)*ratio;
+  float loGain=1.0f+contour_sign(d)*_fabs(d)*(1.0f-ratio);
+  float hiGain=1.0f+contour_sign(d)*_fabs(d)*ratio;
   float pivot=_powf(pivot_ui,1.5747f);
-  float3 orig=keystone_tone_lin_to_dvi3(lin);
-  float3 in=keystone_tone_clamp01_3(orig);
+  float3 orig=contour_lin_to_dvi3(lin);
+  float3 in=contour_clamp01_3(orig);
   float lum=in.x*0.2126f+in.y*0.7152f+in.z*0.0722f;
-  float loMask=keystone_tone_bez_mask(lum,pivot-0.165f,0.33f);
+  float loMask=contour_bez_mask(lum,pivot-0.165f,0.33f);
   float hiMask=1.0f-loMask;
-  float3 ych=keystone_tone_rgb_to_subchen(in);
-  float3 loOut=keystone_tone_subchen_to_rgb(make_float3(ych.x,ych.y*loGain,ych.z));
-  float3 hiOut=keystone_tone_subchen_to_rgb(make_float3(ych.x,ych.y*(1.0f/hiGain),ych.z));
+  float3 ych=contour_rgb_to_subchen(in);
+  float3 loOut=contour_subchen_to_rgb(make_float3(ych.x,ych.y*loGain,ych.z));
+  float3 hiOut=contour_subchen_to_rgb(make_float3(ych.x,ych.y*(1.0f/hiGain),ych.z));
   float3 candidate=loOut*make_float3(loMask,loMask,loMask)+hiOut*make_float3(hiMask,hiMask,hiMask);
   float3 out_dvi=orig+(candidate-in);
-  return keystone_tone_dvi_to_lin3(out_dvi);
+  return contour_dvi_to_lin3(out_dvi);
 }
 
-__DEVICE__ float2 keystone_tone_eval_point(float t,float2 p0,float2 p1,float2 p0c,float2 p1c){
+__DEVICE__ float2 contour_eval_point(float t,float2 p0,float2 p1,float2 p0c,float2 p1c){
   float ax=2.0f*p0.x-2.0f*p1.x+(p0c.x-p0.x)+(p1.x-p1c.x);
   float bx=-3.0f*p0.x+3.0f*p1.x-2.0f*(p0c.x-p0.x)-(p1.x-p1c.x);
   float cx=p0c.x-p0.x,dx=p0.x;
@@ -157,20 +157,20 @@ __DEVICE__ float2 keystone_tone_eval_point(float t,float2 p0,float2 p1,float2 p0
   float cy=p0c.y-p0.y,dy=p0.y;
   return make_float2(ax*t*t*t+bx*t*t+cx*t+dx,ay*t*t*t+by*t*t+cy*t+dy);
 }
-// Exact equivalent of Keystone's 20-sample runtime Hermite table, evaluated procedurally.
+// Exact equivalent of Contour's 20-sample runtime Hermite table, evaluated procedurally.
 // No baked table is stored: adjacent samples are generated from the current control points on demand.
-__DEVICE__ float keystone_tone_hermite20(float x,float2 p0,float2 p1,float2 p0c,float2 p1c){
-  float2 a=keystone_tone_eval_point(0.0f,p0,p1,p0c,p1c);
+__DEVICE__ float contour_hermite20(float x,float2 p0,float2 p1,float2 p0c,float2 p1c){
+  float2 a=contour_eval_point(0.0f,p0,p1,p0c,p1c);
   for(int i=0;i<19;i++){
     float t1=(float)(i+1)/19.0f;
-    float2 b=keystone_tone_eval_point(t1,p0,p1,p0c,p1c);
+    float2 b=contour_eval_point(t1,p0,p1,p0c,p1c);
     if(x>=a.x&&x<b.x){float den=b.x-a.x;if(_fabs(den)<=1.0e-12f)return a.y;float q=(x-a.x)/den;return a.y+(b.y-a.y)*q;}
     a=b;
   }
   return a.y;
 }
 
-__DEVICE__ float keystone_tone_apply_split_curve(float in,float toeStrength,float shoulderStrength,float pivotToe,float pivotShoulder,float curveStart,float curveEnd,float toeDivergence,float shoulderDivergence){
+__DEVICE__ float contour_apply_split_curve(float in,float toeStrength,float shoulderStrength,float pivotToe,float pivotShoulder,float curveStart,float curveEnd,float toeDivergence,float shoulderDivergence){
   float out=in;
   float startEaseToe=0.125f,peakEaseToe=0.4f,endEaseToe=0.15f,toeCenter=0.35f;
   float startEaseShoulder=0.125f,peakEaseShoulder=0.5f,endEaseShoulder=0.3f,shoulderCenter=0.43f,peakEasePivot=0.5f;
@@ -185,13 +185,13 @@ __DEVICE__ float keystone_tone_apply_split_curve(float in,float toeStrength,floa
       p1=make_float2(toeCenter,toeStrength+toeCenter);
       p0c=make_float2(startEaseToe,p0.y+(startEaseToe-p0.x));
       p1c=make_float2(p1.x-peakEasePivot*peakEaseToe,p1.y-peakEasePivot*peakEaseToe);
-      out=keystone_tone_hermite20(in,p0,p1,p0c,p1c);
+      out=contour_hermite20(in,p0,p1,p0c,p1c);
     }else if(in>toeCenter){
       p0=make_float2(toeCenter,toeStrength+toeCenter);
       p1=make_float2(pivotToe,pivotToe);
       p0c=make_float2(p0.x+(1.0f-peakEasePivot)*peakEaseToe,p0.y+(1.0f-peakEasePivot)*peakEaseToe);
       p1c=make_float2(endEaseToe,p1.y-(pivotToe-endEaseToe));
-      out=keystone_tone_hermite20(in,p0,p1,p0c,p1c);
+      out=contour_hermite20(in,p0,p1,p0c,p1c);
     }
   }else if(in>=pivotShoulder&&in<=curveEnd){
     if(in<=shoulderCenter){
@@ -199,19 +199,19 @@ __DEVICE__ float keystone_tone_apply_split_curve(float in,float toeStrength,floa
       p1=make_float2(shoulderCenter,shoulderStrength+shoulderCenter);
       p0c=make_float2(startEaseShoulder,p0.y+(startEaseShoulder-p0.x));
       p1c=make_float2(p1.x-peakEasePivot*peakEaseShoulder,p1.y-peakEasePivot*peakEaseShoulder);
-      out=keystone_tone_hermite20(in,p0,p1,p0c,p1c);
+      out=contour_hermite20(in,p0,p1,p0c,p1c);
     }else{
       p0=make_float2(shoulderCenter,shoulderStrength+shoulderCenter);
       p1=make_float2(curveEnd,curveEnd+shoulderStrength*shoulderDivergence);
       p0c=make_float2(shoulderCenter+(1.0f-peakEasePivot)*peakEaseShoulder,p0.y+(1.0f-peakEasePivot)*peakEaseShoulder);
       p1c=make_float2(endEaseShoulder,p1.y-(p1.x-endEaseShoulder));
-      out=keystone_tone_hermite20(in,p0,p1,p0c,p1c);
+      out=contour_hermite20(in,p0,p1,p0c,p1c);
     }
   }
   return out;
 }
 
-__DEVICE__ float3 ks_apply_keystone_tone_split_tone(float3 lin,float amount,float shadowHueDeg,float highlightHueDeg,float balance,float subtractive){
+__DEVICE__ float3 ks_apply_contour_split_tone(float3 lin,float amount,float shadowHueDeg,float highlightHueDeg,float balance,float subtractive){
   float strength=clampf(amount,0.0f,2.0f);
   if(strength<=1.0e-8f)return lin;
   float loHi=clampf(balance,0.0f,1.0f),sub=clampf(subtractive,0.0f,1.0f);
@@ -219,7 +219,7 @@ __DEVICE__ float3 ks_apply_keystone_tone_split_tone(float3 lin,float amount,floa
   float highlightHue=clampf(highlightHueDeg,0.0f,360.0f)/360.0f;
   const float curveStart=0.0f,curveEnd=1.0f,neutralWidthUi=0.0f,floorDiverge=0.0f,peakDiverge=0.0f;
   const float minToe=0.233f,minShoulder=0.38f;
-  float pivot=keystone_tone_lin_to_dvi(0.18f); // Keystone split domain is DaVinci Intermediate
+  float pivot=contour_lin_to_dvi(0.18f); // Contour split domain is DaVinci Intermediate
   float neutralWidth=neutralWidthUi*0.33f*(curveEnd-curveStart);
   pivot=_fmaxf(pivot,curveStart+minToe);
   float maxNeutralToe=pivot-curveStart-minToe;
@@ -232,26 +232,26 @@ __DEVICE__ float3 ks_apply_keystone_tone_split_tone(float3 lin,float amount,floa
   float toeStrength=_fminf(scaled*(1.0f-loHi),maxStrength*0.5f);
   float shoulderStrength=_fminf(scaled*loHi,maxStrength*0.5f);
 
-  float3 toe=keystone_tone_chen_to_rgb(make_float3(0.5f,toeStrength,-shadowHue))-make_float3(0.5f,0.5f,0.5f);
+  float3 toe=contour_chen_to_rgb(make_float3(0.5f,toeStrength,-shadowHue))-make_float3(0.5f,0.5f,0.5f);
   float toeMin=_fminf(toe.x,_fminf(toe.y,toe.z));
   float toeMax=_fmaxf(toe.x,_fmaxf(toe.y,toe.z));
   if(toeMin<0.0f){toe+=make_float3(_fabs(toeMin)*(1.0f-sub),_fabs(toeMin)*(1.0f-sub),_fabs(toeMin)*(1.0f-sub));toeMax=_fmaxf(toe.x,_fmaxf(toe.y,toe.z));}
   if(toeMax>0.0f)toe-=make_float3(toeMax*sub,toeMax*sub,toeMax*sub);
 
-  float3 shoulder=keystone_tone_chen_to_rgb(make_float3(0.5f,shoulderStrength,-highlightHue))-make_float3(0.5f,0.5f,0.5f);
+  float3 shoulder=contour_chen_to_rgb(make_float3(0.5f,shoulderStrength,-highlightHue))-make_float3(0.5f,0.5f,0.5f);
   float shMin=_fminf(shoulder.x,_fminf(shoulder.y,shoulder.z));
   float shMax=_fmaxf(shoulder.x,_fmaxf(shoulder.y,shoulder.z));
   if(shMin<0.0f){shoulder+=make_float3(_fabs(shMin)*(1.0f-sub),_fabs(shMin)*(1.0f-sub),_fabs(shMin)*(1.0f-sub));shMax=_fmaxf(shoulder.x,_fmaxf(shoulder.y,shoulder.z));}
   if(shMax>0.0f)shoulder-=make_float3(shMax*sub,shMax*sub,shMax*sub);
 
-  float3 orig=keystone_tone_lin_to_dvi3(lin);
-  float3 base=keystone_tone_clamp01_3(orig);
+  float3 orig=contour_lin_to_dvi3(lin);
+  float3 base=contour_clamp01_3(orig);
   float3 candidate=make_float3(
-    keystone_tone_apply_split_curve(base.x,toe.x,shoulder.x,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge),
-    keystone_tone_apply_split_curve(base.y,toe.y,shoulder.y,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge),
-    keystone_tone_apply_split_curve(base.z,toe.z,shoulder.z,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge));
+    contour_apply_split_curve(base.x,toe.x,shoulder.x,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge),
+    contour_apply_split_curve(base.y,toe.y,shoulder.y,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge),
+    contour_apply_split_curve(base.z,toe.z,shoulder.z,pivotToe,pivotShoulder,curveStart,curveEnd,floorDiverge,peakDiverge));
   float3 out_dvi=orig+(candidate-base);
-  return keystone_tone_dvi_to_lin3(out_dvi);
+  return contour_dvi_to_lin3(out_dvi);
 }
 
 // ---- Density-domain safety gates ----
@@ -277,7 +277,7 @@ __DEVICE__ float smooth01(float t){t=clampf(t,0.0f,1.0f);return t*t*(3.0f-2.0f*t
 __DEVICE__ float3 mix3(float3 a,float3 b,float t){return a+(b-a)*make_float3(t,t,t);}
 
 
-// ---- Keystone Output sampling note ----
+// ---- Referent sampling note ----
 // The embedded LUT is sampled at exact 33^3 lattice nodes from inside transform().
 // Resolve's hidden LUT parameter object is transform-scoped, so APPLY_LUT must not be
 // called from a helper function. Keystone performs the interpolation/extrapolation itself.
@@ -307,10 +307,10 @@ __DEVICE__ float3 ks_mul_rows(float3 r0,float3 r1,float3 r2,float3 v){
     r2.x*v.x+r2.y*v.y+r2.z*v.z);
 }
 
-// Keystone Output Creative White port for Keystone.
-// Keystone Output applies its CAT after its display tonescale and weights it with:
+// OpenDRT Creative White port for Keystone.
+// OpenDRT applies its CAT after its display tonescale and weights it with:
 //   cwp_f = pow(tsn, 2 * CreativeWhiteLimit)
-// Keystone intentionally has no ODT. We therefore keep Keystone Output's selector,
+// Keystone intentionally has no ODT. We therefore keep OpenDRT's selector,
 // CAT02 matrices, and power-law mix exactly, but derive tsn from scene
 // luminance encoded through LogC4 and normalized from scene black to code 1.
 // This keeps D65 exact identity and makes Limit act as a highlight bias.
@@ -423,10 +423,10 @@ __DEVICE__ float3 ks_apply_opponent_wb_awg4(float3 lin,float temp_value,float ti
   return xyz_to_awg4(balanced_xyz);
 }
 
-// ---- ND filter-factor family ----
-// Keystone publishes ND2/4/8/... as filter factors. Neutral transmission = 1 / factor.
+// ---- HOYA PRO ND filter-factor family ----
+// HOYA publishes ND2/4/8/... as filter factors. Neutral transmission = 1 / factor.
 // This is an equal-channel exposure model; no spectral neutrality claim is made.
-__DEVICE__ float ks_keystone_nd_nd_transmittance(int p){
+__DEVICE__ float ks_hoya_nd_transmittance(int p){
   if(p==1)return 0.500000000f; // ND2
   if(p==2)return 0.250000000f; // ND4
   if(p==3)return 0.125000000f; // ND8
@@ -440,23 +440,23 @@ __DEVICE__ float ks_keystone_nd_nd_transmittance(int p){
   if(p==11)return 0.001000000f; // ND1000
   return 1.0f;
 }
-__DEVICE__ float3 ks_apply_keystone_nd_nd(float3 rgb,int p){float t=ks_keystone_nd_nd_transmittance(p);return rgb*make_float3(t,t,t);}
+__DEVICE__ float3 ks_apply_hoya_nd(float3 rgb,int p){float t=ks_hoya_nd_transmittance(p);return rgb*make_float3(t,t,t);}
 
-// ---- Keystone v0.6.0 scalar tone primitives; v4.1 drives them from LogC4-encoded scene luminance ----
-__DEVICE__ float keystone_skin_soft_black_point(float x,float bp,float knee){
+// ---- Primera v0.6.0 scalar tone primitives; v4.1 drives them from LogC4-encoded scene luminance ----
+__DEVICE__ float primera_soft_black_point(float x,float bp,float knee){
   if(x<=0.0f)return x;
   float corrected=x-bp;
   if(corrected>=knee)return corrected;
   return knee*_expf(corrected/knee-1.0f);
 }
-__DEVICE__ float keystone_skin_shadow_fill(float x,float gain,float mid){
+__DEVICE__ float primera_shadow_fill(float x,float gain,float mid){
   if(x<=0.0f)return x;
   if(x>=mid)return x;
   float t=x/mid;
   float blend=t*t*(3.0f-2.0f*t);
   return x*(gain+(1.0f-gain)*blend);
 }
-__DEVICE__ float keystone_skin_highlight_gain(float x,float gain,float mid){
+__DEVICE__ float primera_highlight_gain(float x,float gain,float mid){
   if(x<=mid)return x;
   if(x>=1.0f)return x;
   float t=(x-mid)/(1.0f-mid);
@@ -469,7 +469,7 @@ __DEVICE__ float ks_tanh_positive(float x){
   float e=_expf(-2.0f*z);
   return (1.0f-e)/(1.0f+e);
 }
-__DEVICE__ float keystone_skin_soft_highlight(float x,float amount,float mid){
+__DEVICE__ float primera_soft_highlight(float x,float amount,float mid){
   if(x<=0.0f)return x;
   float knee_amount=_fminf(amount,1.0f);
   float strength=1.0f+_fmaxf(amount-1.0f,0.0f)*2.0f;
@@ -479,7 +479,7 @@ __DEVICE__ float keystone_skin_soft_highlight(float x,float amount,float mid){
   float t=(x-knee)/range*strength;
   return knee+range*ks_tanh_positive(t)/strength;
 }
-__DEVICE__ float keystone_skin_rolling_contrast(float x,float contrast,float pivot){
+__DEVICE__ float primera_rolling_contrast(float x,float contrast,float pivot){
   if(x<=0.0f)return x;
   if(x>=1.0f)return x;
   if(x<=pivot)return _powf(x/pivot,contrast)*pivot;
@@ -488,7 +488,7 @@ __DEVICE__ float keystone_skin_rolling_contrast(float x,float contrast,float piv
   return 1.0f-_powf(inv/inv_pivot,contrast)*inv_pivot;
 }
 // ---- Keystone v4.1 luminance-carrier tone wrapper ----
-// Keep the Keystone scalar response shapes, but drive them from scene Y and rescale
+// Keep the Primera scalar response shapes, but drive them from scene Y and rescale
 // AWG4 RGB uniformly. This decouples tone shaping from hue/chroma shaping.
 __DEVICE__ float3 ks_scale_awg4_to_target_y(float3 rgb,float targetY){
   float Y=awg4_to_xyz(rgb).y;
@@ -497,28 +497,28 @@ __DEVICE__ float3 ks_scale_awg4_to_target_y(float3 rgb,float targetY){
   if(!finitef(k))return rgb;
   return rgb*make_float3(k,k,k);
 }
-__DEVICE__ float3 keystone_skin_black_luma(float3 rgb,float amount){
+__DEVICE__ float3 primera_black_luma(float3 rgb,float amount){
   if(_fabs(amount)<=1.0e-9f)return rgb;
   float Y=awg4_to_xyz(rgb).y;
   if(Y<=0.0f)return rgb;
-  float targetY=keystone_skin_soft_black_point(Y,-amount,0.005f);
+  float targetY=primera_soft_black_point(Y,-amount,0.005f);
   return ks_scale_awg4_to_target_y(rgb,targetY);
 }
-__DEVICE__ float3 keystone_skin_tone_luma(float3 rgb,float contrast,float shadows,float highlights,float roll){
+__DEVICE__ float3 primera_tone_luma(float3 rgb,float contrast,float shadows,float highlights,float roll){
   if(_fabs(contrast-1.0f)<=1.0e-8f&&_fabs(shadows)<=1.0e-8f&&_fabs(highlights)<=1.0e-8f&&roll<=1.0e-8f)return rgb;
   float Y=awg4_to_xyz(rgb).y;
   if(Y<=0.0f)return rgb;
   float y=logc4_encode_scalar(Y);
   float mid=logc4_encode_scalar(0.18f);
-  if(_fabs(contrast-1.0f)>1.0e-8f)y=keystone_skin_rolling_contrast(y,contrast,mid);
-  if(_fabs(shadows)>1.0e-8f)y=keystone_skin_shadow_fill(y,_powf(2.0f,shadows),mid);
-  if(_fabs(highlights)>1.0e-8f)y=keystone_skin_highlight_gain(y,_powf(2.0f,highlights),mid);
-  if(roll>1.0e-8f)y=keystone_skin_soft_highlight(y,roll,mid);
+  if(_fabs(contrast-1.0f)>1.0e-8f)y=primera_rolling_contrast(y,contrast,mid);
+  if(_fabs(shadows)>1.0e-8f)y=primera_shadow_fill(y,_powf(2.0f,shadows),mid);
+  if(_fabs(highlights)>1.0e-8f)y=primera_highlight_gain(y,_powf(2.0f,highlights),mid);
+  if(roll>1.0e-8f)y=primera_soft_highlight(y,roll,mid);
   return ks_scale_awg4_to_target_y(rgb,logc4_decode_scalar(y));
 }
 
 // ---- Characteristic curve presets ----
-// Keystone source: exact MIT-licensed H&D closed form and the source preset parameters.
+// Speak source: exact MIT-licensed H&D closed form and the source preset parameters.
 // Keystone applies the scalar result to scene Y and uniformly rescales AWG4 RGB,
 // so a curve changes tone without importing per-channel color behavior.
 __DEVICE__ float ks_softplus(float z){
@@ -555,7 +555,7 @@ __DEVICE__ float3 ks_apply_curve_preset(float3 rgb,int p,float amount){
 
 // ---- Cone-coordinate color density ----
 // Behavioral reimplementation of the dense-color principle used by Moaz Elgabry's
-// historical Keystone Density.dctl: chromatic distance from the achromatic RGB axis drives
+// historical ME_Desatch.dctl: chromatic distance from the achromatic RGB axis drives
 // a reduction in radial/code-value magnitude, so stronger color becomes darker rather
 // than moving toward a washed-out gray. This is intentionally a single global control.
 //
@@ -587,7 +587,7 @@ __DEVICE__ float3 ks_apply_cone_density(float3 enc,float amount){
   return enc*make_float3(scale,scale,scale);
 }
 
-// ---- Keystone v0.6.0 positive saturation functional form, ported to LogC4 ----
+// ---- Primera v0.6.0 positive saturation functional form, ported to LogC4 ----
 __DEVICE__ float density10(float lin){return -_log2f(_fmaxf(lin,1.0e-6f))*KS_LOG10_2;}
 __DEVICE__ float3 ks_rgb_to_hsv(float3 rgb){
   float r=rgb.x,g=rgb.y,b=rgb.z;
@@ -636,8 +636,8 @@ __DEVICE__ float3 apply_pos_sat_filmic(float3 rgb,float amount){
   return rgb+(candidate-rgb)*make_float3(gate,gate,gate);
 }
 
-// ---- Keystone 5207 strength-dependent interlayer term ----
-__DEVICE__ float3 ks_keystone_interlayer_5207_iie_poly(float3 v,float strength){
+// ---- Genesis 5207 strength-dependent interlayer term ----
+__DEVICE__ float3 ks_genesis_5207_iie_poly(float3 v,float strength){
   float R=v.x,G=v.y,B=v.z;
   float RR=R*R,RG=R*G,RB=R*B,GG=G*G,GB=G*B,BB=B*B;
   float s=strength;
@@ -650,7 +650,7 @@ __DEVICE__ float3 ks_keystone_interlayer_5207_iie_poly(float3 v,float strength){
     s*(RR*GEN_5207_IIE_R2_3+GG*GEN_5207_IIE_R2_4+BB*GEN_5207_IIE_R2_5+RG*GEN_5207_IIE_R2_6+RB*GEN_5207_IIE_R2_7+GB*GEN_5207_IIE_R2_8)+GEN_5207_IIE_R2_9);
 }
 
-__DEVICE__ float3 ks_apply_keystone_interlayer_interlayer(float3 rgb,float amount){
+__DEVICE__ float3 ks_apply_genesis_interlayer(float3 rgb,float amount){
   float a=clampf(amount,0.0f,3.0f);
   if(a<=1.0e-8f)return rgb;
   float gate=ks_density_gate(rgb)*ks_neutral_activity(rgb);
@@ -658,16 +658,16 @@ __DEVICE__ float3 ks_apply_keystone_interlayer_interlayer(float3 rgb,float amoun
 
   // Build scale-invariant chromatic optical density. The common density floor
   // carries exposure; only channel-to-channel dye-density differences are fed
-  // to the Keystone IIE term, so neutral RGB is an exact fixed axis.
+  // to the Genesis IIE term, so neutral RGB is an exact fixed axis.
   float3 d=make_float3(-_log10f(rgb.x),-_log10f(rgb.y),-_log10f(rgb.z));
   float neutral=_fminf(d.x,_fminf(d.y,d.z));
   float3 chroma=d-make_float3(neutral,neutral,neutral);
 
-  // Keystone's UI strength changes only the quadratic columns of the 3x10
+  // Genesis's UI strength changes only the quadratic columns of the 3x10
   // matrix. Subtracting strength=0 isolates that exact user-controlled term
-  // without importing Keystone's fixed stock transform.
-  float3 base=ks_keystone_interlayer_5207_iie_poly(chroma,0.0f);
-  float3 active=ks_keystone_interlayer_5207_iie_poly(chroma,a);
+  // without importing Genesis's fixed stock transform.
+  float3 base=ks_genesis_5207_iie_poly(chroma,0.0f);
+  float3 active=ks_genesis_5207_iie_poly(chroma,a);
   float3 out_chroma=chroma+(active-base);
   float3 dout=make_float3(neutral,neutral,neutral)+out_chroma;
   float3 candidate=make_float3(_powf(10.0f,-dout.x),_powf(10.0f,-dout.y),_powf(10.0f,-dout.z));
@@ -844,7 +844,7 @@ __DEVICE__ float3 ks_apply_chi_drx_look(float3 awg4,float amount){
   }
 
   // 2) Contrast node. At Amount 1 this lands on the source grade's 1.208 value.
-  out=keystone_skin_tone_luma(out,1.0f+0.208f*a,0.0f,0.0f,0.0f);
+  out=primera_tone_luma(out,1.0f+0.208f*a,0.0f,0.0f,0.0f);
 
   // 3) Saturation node. Source DRX stores 0.736 with 1.0 as neutral.
   // Oklab chroma scaling keeps this reduction perceptual and luminance-stable.
@@ -894,7 +894,7 @@ __DEVICE__ float3 ks_apply_island_look(float3 awg4,float amount){
 
   // 1) Open, sunlit contrast: enough separation for bright exterior scenes,
   // deliberately gentler than CHI so beaches/clouds do not get crunchy.
-  out=keystone_skin_tone_luma(out,1.0f+0.105f*a,0.0f,0.0f,0.0f);
+  out=primera_tone_luma(out,1.0f+0.105f*a,0.0f,0.0f,0.0f);
 
   // 2) Pull generic scene chroma down first. This prevents the preset from
   // becoming a blanket saturation boost and leaves room to rebuild chosen hues.
@@ -956,38 +956,38 @@ __DEVICE__ float3 ks_apply_color_look_base(float3 awg4,int p,float amount){
   return ks_apply_authored_color_look(awg4,p,amount);
 }
 
-// ---- Recovered Keystone display-referred Basic operators ----
-// Source path traced through Keystone.ofx OpenCL/WGSL processing assets.
-// Keystone's Basic block runs after its conversion stage. Keystone bridges only
+// ---- Recovered ToneLab display-referred Basic operators ----
+// Source path traced through ToneLab.ofx OpenCL/WGSL processing assets.
+// ToneLab's Basic block runs after its conversion stage. Keystone bridges only
 // this block AWG4 linear -> XYZ D65 -> Rec.709 linear -> gamma 2.4, then back.
-__DEVICE__ float ks_skin_sign_pow(float x,float p){
+__DEVICE__ float tl_sign_pow(float x,float p){
   if(x==0.0f)return 0.0f;
   return (x<0.0f?-1.0f:1.0f)*_powf(_fabs(x),p);
 }
-__DEVICE__ float3 ks_skin_rec709_gamma24_encode(float3 lin){
+__DEVICE__ float3 tl_rec709_gamma24_encode(float3 lin){
   const float inv=0.4166666666666667f;
-  return make_float3(ks_skin_sign_pow(lin.x,inv),ks_skin_sign_pow(lin.y,inv),ks_skin_sign_pow(lin.z,inv));
+  return make_float3(tl_sign_pow(lin.x,inv),tl_sign_pow(lin.y,inv),tl_sign_pow(lin.z,inv));
 }
-__DEVICE__ float3 ks_skin_rec709_gamma24_decode(float3 enc){
-  return make_float3(ks_skin_sign_pow(enc.x,2.4f),ks_skin_sign_pow(enc.y,2.4f),ks_skin_sign_pow(enc.z,2.4f));
+__DEVICE__ float3 tl_rec709_gamma24_decode(float3 enc){
+  return make_float3(tl_sign_pow(enc.x,2.4f),tl_sign_pow(enc.y,2.4f),tl_sign_pow(enc.z,2.4f));
 }
-__DEVICE__ float3 ks_awg4_to_ks_skin_rec709(float3 awg4){
+__DEVICE__ float3 ks_awg4_to_tl_rec709(float3 awg4){
   float3 xyz=awg4_to_xyz(awg4);
   float3 lin709=ks_mul_rows(XYZ_TO_REC709_R0,XYZ_TO_REC709_R1,XYZ_TO_REC709_R2,xyz);
-  return ks_skin_rec709_gamma24_encode(lin709);
+  return tl_rec709_gamma24_encode(lin709);
 }
-__DEVICE__ float3 ks_ks_skin_rec709_to_awg4(float3 rgb709){
-  float3 lin709=ks_skin_rec709_gamma24_decode(rgb709);
+__DEVICE__ float3 ks_tl_rec709_to_awg4(float3 rgb709){
+  float3 lin709=tl_rec709_gamma24_decode(rgb709);
   float3 xyz=ks_mul_rows(REC709_TO_XYZ_R0,REC709_TO_XYZ_R1,REC709_TO_XYZ_R2,lin709);
   return xyz_to_awg4(xyz);
 }
-__DEVICE__ float ks_skin_luma709(float3 rgb){return 0.2126f*rgb.x+0.7152f*rgb.y+0.0722f*rgb.z;}
+__DEVICE__ float tl_luma709(float3 rgb){return 0.2126f*rgb.x+0.7152f*rgb.y+0.0722f*rgb.z;}
 
-// Direct port of Keystone Basic Adjustments Bleach Bypass.
-// Input must be Keystone's display-referred Rec.709/Gamma 2.4 signal.
+// Direct port of ToneLab Basic Adjustments Bleach Bypass.
+// Input must be ToneLab's display-referred Rec.709/Gamma 2.4 signal.
 // No skin mask, gamut clamp, safety mix, or other Keystone modification.
-__DEVICE__ float3 ks_skin_bleach_bypass_exact(float3 rgb,float amount){
-  float l=ks_skin_luma709(rgb);
+__DEVICE__ float3 tl_bleach_bypass_exact(float3 rgb,float amount){
+  float l=tl_luma709(rgb);
   float3 lum=make_float3(l,l,l);
   float3 base=mix3(rgb,lum,0.5f*amount);
   float overlay_mix=clampf((l-0.45f)*10.0f,0.0f,1.0f);
@@ -999,9 +999,9 @@ __DEVICE__ float3 ks_skin_bleach_bypass_exact(float3 rgb,float amount){
   return mix3(rgb,mix3(multiply,screen,overlay_mix),amount);
 }
 
-// Standard HSL hue/lightness carrier used by Keystone's recovered skin selector.
+// Standard HSL hue/lightness carrier used by ToneLab's recovered skin selector.
 // Returns hue in degrees [0,360) in x and HSL lightness in y.
-__DEVICE__ float2 ks_skin_hsl_hue_lightness(float3 rgb){
+__DEVICE__ float2 tl_hsl_hue_lightness(float3 rgb){
   float mx=_fmaxf(rgb.x,_fmaxf(rgb.y,rgb.z));
   float mn=_fminf(rgb.x,_fminf(rgb.y,rgb.z));
   float d=mx-mn;
@@ -1013,22 +1013,22 @@ __DEVICE__ float2 ks_skin_hsl_hue_lightness(float3 rgb){
   }
   return make_float2(h,0.5f*(mx+mn));
 }
-__DEVICE__ float ks_skin_hue_distance_deg(float a,float b){
+__DEVICE__ float tl_hue_distance_deg(float a,float b){
   float d=_fabs(a-b);
   return _fminf(d,360.0f-d);
 }
-__DEVICE__ float ks_skin_skin_mask(float3 rgb){
-  float2 hl=ks_skin_hsl_hue_lightness(rgb);
-  float hd=ks_skin_hue_distance_deg(hl.x,KS_SKIN_SKIN_TARGET_HUE_DEG);
-  float hue_den=KS_SKIN_SKIN_RANGE_DEG*KS_SKIN_SKIN_RANGE_DEG;
-  float ld=hl.y-KS_SKIN_SKIN_LIGHTNESS_CENTER;
-  float lum_den=KS_SKIN_SKIN_LIGHTNESS_WIDTH*KS_SKIN_SKIN_LIGHTNESS_WIDTH;
+__DEVICE__ float tl_skin_mask(float3 rgb){
+  float2 hl=tl_hsl_hue_lightness(rgb);
+  float hd=tl_hue_distance_deg(hl.x,TL_SKIN_TARGET_HUE_DEG);
+  float hue_den=TL_SKIN_RANGE_DEG*TL_SKIN_RANGE_DEG;
+  float ld=hl.y-TL_SKIN_LIGHTNESS_CENTER;
+  float lum_den=TL_SKIN_LIGHTNESS_WIDTH*TL_SKIN_LIGHTNESS_WIDTH;
   float hue_mask=_expf(-(hd*hd)/_fmaxf(hue_den,1.0e-12f));
   float luma_mask=_expf(-(ld*ld)/_fmaxf(lum_den,1.0e-12f));
   return clampf(hue_mask*luma_mask,0.0f,1.0f);
 }
 
-__DEVICE__ float3 ks_skin_fade(float3 rgb,float amount){
+__DEVICE__ float3 tl_fade(float3 rgb,float amount){
   float a=clampf(amount,0.0f,1.0f);
   if(a<=1.0e-8f)return rgb;
   float lift=a*0.25f;
@@ -1036,19 +1036,19 @@ __DEVICE__ float3 ks_skin_fade(float3 rgb,float amount){
   return rgb+make_float3(lift*t.x*t.x,lift*t.y*t.y,lift*t.z*t.z);
 }
 
-__DEVICE__ float3 ks_apply_keystone_fade(float3 awg4,float fade){
+__DEVICE__ float3 ks_apply_tonelab_fade(float3 awg4,float fade){
   if(fade<=1.0e-8f)return awg4;
-  float3 rgb=ks_awg4_to_ks_skin_rec709(awg4);
-  float skin=ks_skin_skin_mask(rgb);
-  float3 processed=ks_skin_fade(rgb,fade);
-  // Preserve the existing Keystone-derived skin protection around Fade.
+  float3 rgb=ks_awg4_to_tl_rec709(awg4);
+  float skin=tl_skin_mask(rgb);
+  float3 processed=tl_fade(rgb,fade);
+  // Preserve the existing ToneLab-derived skin protection around Fade.
   float3 protected_rgb=mix3(rgb,processed,1.0f-skin);
-  return ks_ks_skin_rec709_to_awg4(protected_rgb);
+  return ks_tl_rec709_to_awg4(protected_rgb);
 }
 
 
-// Keystone-derived building blocks for Keystone's existing Look / Color presets.
-// The operator equations are recovered Keystone math. These recipe amounts and
+// ToneLab-derived building blocks for Keystone's existing Look / Color presets.
+// The operator equations are recovered ToneLab math. These recipe amounts and
 // their combination with Keystone hue recipes are intentionally Keystone-authored.
 __DEVICE__ float ks_look_recipe_fade(int p){
   if(p==1)return 0.04f;
@@ -1071,51 +1071,51 @@ __DEVICE__ float3 ks_apply_color_look(float3 awg4,int p,float amount){
   float3 out=awg4;
   float fade=ks_look_recipe_fade(p)*a;
   if(fade>1.0e-8f)
-    out=ks_apply_keystone_fade(out,fade);
+    out=ks_apply_tonelab_fade(out,fade);
 
   // Preserve each preset's established Keystone hue/tone identity.
   out=ks_apply_color_look_base(out,p,a);
   return out;
 }
 
-// ---- Keystone Skin v0.6.0 scalar qualifier/edit core, evaluated in LogC4/AWG4 ----
-#define keystone_skin_SKIN_HUE_CENTER (28.0f/360.0f)
-#define keystone_skin_SKIN_HUE_WIDTH (28.0f/360.0f)
-#define keystone_skin_SKIN_COMPRESS_EXTRA 0.4f
-__DEVICE__ float keystone_skin_hue_distance(float h1,float h2){float d=_fabs(h1-h2);return _fminf(d,1.0f-d);}
-__DEVICE__ float keystone_skin_smoothstep(float e0,float e1,float x){float t=clampf((x-e0)/(e1-e0),0.0f,1.0f);return t*t*(3.0f-2.0f*t);}
-__DEVICE__ float keystone_skin_skin_mask_gated(float r,float g,float b,float range,float lo,float hi){
+// ---- PrimeraSkin v0.6.0 scalar qualifier/edit core, evaluated in LogC4/AWG4 ----
+#define PRIMERA_SKIN_HUE_CENTER (28.0f/360.0f)
+#define PRIMERA_SKIN_HUE_WIDTH (28.0f/360.0f)
+#define PRIMERA_SKIN_COMPRESS_EXTRA 0.4f
+__DEVICE__ float primera_hue_distance(float h1,float h2){float d=_fabs(h1-h2);return _fminf(d,1.0f-d);}
+__DEVICE__ float primera_smoothstep(float e0,float e1,float x){float t=clampf((x-e0)/(e1-e0),0.0f,1.0f);return t*t*(3.0f-2.0f*t);}
+__DEVICE__ float primera_skin_mask_gated(float r,float g,float b,float range,float lo,float hi){
   float sum=r+g+b;
   if(sum<0.01f)return 0.0f;
   float rn=r/sum,gn=g/sum,bn=b/sum;
-  float gn_gate=keystone_skin_smoothstep(0.22f,0.33f,gn)*(1.0f-keystone_skin_smoothstep(0.37f,0.48f,gn));
-  float rb_gate=keystone_skin_smoothstep(0.0f,0.04f,rn-bn);
+  float gn_gate=primera_smoothstep(0.22f,0.33f,gn)*(1.0f-primera_smoothstep(0.37f,0.48f,gn));
+  float rb_gate=primera_smoothstep(0.0f,0.04f,rn-bn);
   float3 hsv=ks_rgb_to_hsv(make_float3(r,g,b));
-  float width=keystone_skin_SKIN_HUE_WIDTH*range;
-  float dist=keystone_skin_hue_distance(hsv.x,keystone_skin_SKIN_HUE_CENTER);
-  float hue_gate=1.0f-keystone_skin_smoothstep(0.0f,width,dist);
-  float lo_gate=(lo>0.001f)?keystone_skin_smoothstep(lo*0.5f,lo,hsv.z):1.0f;
-  float hi_gate=(hi<0.999f)?1.0f-keystone_skin_smoothstep(hi-(1.0f-hi)*0.5f,hi,hsv.z):1.0f;
+  float width=PRIMERA_SKIN_HUE_WIDTH*range;
+  float dist=primera_hue_distance(hsv.x,PRIMERA_SKIN_HUE_CENTER);
+  float hue_gate=1.0f-primera_smoothstep(0.0f,width,dist);
+  float lo_gate=(lo>0.001f)?primera_smoothstep(lo*0.5f,lo,hsv.z):1.0f;
+  float hi_gate=(hi<0.999f)?1.0f-primera_smoothstep(hi-(1.0f-hi)*0.5f,hi,hsv.z):1.0f;
   return hue_gate*gn_gate*rb_gate*lo_gate*hi_gate;
 }
-__DEVICE__ float3 apply_keystone_skin_skin_scalar(float3 enc,float hue,float sat,float density,float range,float evenness,float lo,float hi){
+__DEVICE__ float3 apply_primera_skin_scalar(float3 enc,float hue,float sat,float density,float range,float evenness,float lo,float hi){
   float r=enc.x,g=enc.y,b=enc.z;
   if(evenness>0.0f){
-    float cm=keystone_skin_skin_mask_gated(r,g,b,range+keystone_skin_SKIN_COMPRESS_EXTRA,lo,hi);
+    float cm=primera_skin_mask_gated(r,g,b,range+PRIMERA_SKIN_COMPRESS_EXTRA,lo,hi);
     if(cm>1.0e-6f){
       float3 hsv=ks_rgb_to_hsv(make_float3(r,g,b));
-      float d=hsv.x-keystone_skin_SKIN_HUE_CENTER;
+      float d=hsv.x-PRIMERA_SKIN_HUE_CENTER;
       if(d>0.5f)d-=1.0f;
       if(d<-0.5f)d+=1.0f;
       d*=(1.0f-evenness*cm);
-      hsv.x=keystone_skin_SKIN_HUE_CENTER+d;
+      hsv.x=PRIMERA_SKIN_HUE_CENTER+d;
       if(hsv.x<0.0f)hsv.x+=1.0f;
       if(hsv.x>1.0f)hsv.x-=1.0f;
       float3 n=ks_hsv_to_rgb(hsv);
       r=n.x;g=n.y;b=n.z;
     }
   }
-  float mask=keystone_skin_skin_mask_gated(r,g,b,range,lo,hi);
+  float mask=primera_skin_mask_gated(r,g,b,range,lo,hi);
   if(mask>1.0e-6f){
     float3 hsv=ks_rgb_to_hsv(make_float3(r,g,b));
     if(_fabs(hue)>1.0e-9f){
@@ -1162,8 +1162,8 @@ __DEVICE__ float3 input_gamut_heal_xyz(float3 xyz){float3 ap1=mmul(X65_TO_AP1_C0
 // ============================================================================
 
 
-// ---- Keystone camera UV/IR filter shape, compact AWG4 RGB projection ----
-// Keystone applies this wavelength-resolved before film exposure. Keystone does
+// ---- SpektraFilm camera UV/IR filter shape, compact AWG4 RGB projection ----
+// SpektraFilm applies this wavelength-resolved before film exposure. Keystone does
 // not carry a spectrum, so the same erf cutoff law is evaluated at a documented
 // 610/550/450 nm RGB basis. This preserves the source cutoff behavior but is not
 // spectral equivalence.
@@ -1173,7 +1173,7 @@ __DEVICE__ float ks_sf_erf_approx(float x){
   return sg*y;
 }
 __DEVICE__ float ks_sf_cut(float wl,float center,float width){float w=_fmaxf(_fabs(width),1.0e-6f);return 0.5f*ks_sf_erf_approx((wl-center)/w)+0.5f;}
-__DEVICE__ float3 ks_apply_keystone_filterfilm_uv_ir(float3 rgb,int uvOn,float uvEdge,int irOn,float irEdge){
+__DEVICE__ float3 ks_apply_spektrafilm_uv_ir(float3 rgb,int uvOn,float uvEdge,int irOn,float irEdge){
   if(!uvOn&&!irOn)return rgb;
   float tr=1.0f,tg=1.0f,tb=1.0f;
   if(uvOn){tr*=ks_sf_cut(610.0f,uvEdge,8.0f);tg*=ks_sf_cut(550.0f,uvEdge,8.0f);tb*=ks_sf_cut(450.0f,uvEdge,8.0f);}
@@ -1182,25 +1182,25 @@ __DEVICE__ float3 ks_apply_keystone_filterfilm_uv_ir(float3 rgb,int uvOn,float u
   return make_float3(rgb.x*tr/mean,rgb.y*tg/mean,rgb.z*tb/mean);
 }
 
-// ---- Keystone Skin Tones block ----
-// Parameter names, ranges, defaults and preset names are recovered from Keystone.ofx.
-// This implementation uses Keystone's recovered HSL hue/lightness Gaussian selector.
-__DEVICE__ float ks_skin_skin_mask_controls(float3 rgb,float centerOffset,float range,float brightCenter,float brightRange){
-  float2 hl=ks_skin_hsl_hue_lightness(rgb);
-  float center=KS_SKIN_SKIN_TARGET_HUE_DEG+clampf(centerOffset,-30.0f,30.0f);
+// ---- ToneLab Skin Tones block ----
+// Parameter names, ranges, defaults and preset names are recovered from ToneLab.ofx.
+// This implementation uses ToneLab's recovered HSL hue/lightness Gaussian selector.
+__DEVICE__ float tl_skin_mask_controls(float3 rgb,float centerOffset,float range,float brightCenter,float brightRange){
+  float2 hl=tl_hsl_hue_lightness(rgb);
+  float center=TL_SKIN_TARGET_HUE_DEG+clampf(centerOffset,-30.0f,30.0f);
   while(center<0.0f)center+=360.0f;while(center>=360.0f)center-=360.0f;
-  float hd=ks_skin_hue_distance_deg(hl.x,center);
+  float hd=tl_hue_distance_deg(hl.x,center);
   float hr=clampf(range,15.0f,65.0f);
   float bc=clampf(brightCenter,0.0f,1.0f),br=clampf(brightRange,0.25f,1.75f);
-  // Keystone's original fixed brightness width was 0.4 at the neutral range value 1.
+  // ToneLab's original fixed brightness width was 0.4 at the neutral range value 1.
   float lw=0.4f*br;
   float ld=hl.y-bc;
   return clampf(_expf(-(hd*hd)/(hr*hr))*_expf(-(ld*ld)/(lw*lw)),0.0f,1.0f);
 }
-__DEVICE__ float3 ks_skin_skin_tones_apply_rgb(float3 rgb,int enabled,float sat,float lum,float hue,float center,float range,float bcenter,float brange,float intensity){
+__DEVICE__ float3 tl_skin_tones_apply_rgb(float3 rgb,int enabled,float sat,float lum,float hue,float center,float range,float bcenter,float brange,float intensity){
   if(!enabled)return rgb;
   float master=clampf(intensity,0.0f,200.0f)*0.01f;if(master<=1.0e-8f)return rgb;
-  float mask=ks_skin_skin_mask_controls(rgb,center,range,bcenter,brange);
+  float mask=tl_skin_mask_controls(rgb,center,range,bcenter,brange);
   float w=clampf(mask*master,0.0f,1.0f);
   if(w<=1.0e-8f)return rgb;
   float3 hsv=ks_rgb_to_hsv(rgb);
@@ -1214,10 +1214,10 @@ __DEVICE__ float3 ks_skin_skin_tones_apply_rgb(float3 rgb,int enabled,float sat,
   // keep adjustment smooth through the soft selector
   return mix3(rgb,changed,w);
 }
-__DEVICE__ float3 ks_apply_keystone_skin(float3 awg4,int enabled,float sat,float lum,float hue,float center,float range,float bcenter,float brange,float intensity){
+__DEVICE__ float3 ks_apply_tonelab_skin(float3 awg4,int enabled,float sat,float lum,float hue,float center,float range,float bcenter,float brange,float intensity){
   if(!enabled)return awg4;
-  float3 rgb=ks_awg4_to_ks_skin_rec709(awg4);
-  rgb=ks_skin_skin_tones_apply_rgb(rgb,enabled,sat,lum,hue,center,range,bcenter,brange,intensity);
-  return ks_ks_skin_rec709_to_awg4(rgb);
+  float3 rgb=ks_awg4_to_tl_rec709(awg4);
+  rgb=tl_skin_tones_apply_rgb(rgb,enabled,sat,lum,hue,center,range,bcenter,brange,intensity);
+  return ks_tl_rec709_to_awg4(rgb);
 }
-__DEVICE__ float ks_keystone_skin_mask_awg4(float3 awg4,float center,float range,float bcenter,float brange){return ks_skin_skin_mask_controls(ks_awg4_to_ks_skin_rec709(awg4),center,range,bcenter,brange);}
+__DEVICE__ float ks_tonelab_skin_mask_awg4(float3 awg4,float center,float range,float bcenter,float brange){return tl_skin_mask_controls(ks_awg4_to_tl_rec709(awg4),center,range,bcenter,brange);}

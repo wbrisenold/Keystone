@@ -15,8 +15,8 @@ BUNDLE="build/KeystoneOFX.ofx.bundle"; if [ ! -d "$BUNDLE" ]; then BUNDLE="$(fin
 test -n "$BUNDLE"; test -d "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/Resources"
 cp build/KeystoneKernels.metallib "$BUNDLE/Contents/Resources/KeystoneKernels.metallib"
-cp resources/Keystone_Output_LogC4_to_Rec709.cube "$BUNDLE/Contents/Resources/Keystone_Output_LogC4_to_Rec709.cube"
-test "$(shasum -a 256 "$BUNDLE/Contents/Resources/Keystone_Output_LogC4_to_Rec709.cube" | awk '{print $1}')" = "9bd910e505f4f8fdfef67f97b85b7127f80528c4fda99e87ebb25eaa985c6d54"
+cp resources/Referent_LogC4_to_Rec709.cube "$BUNDLE/Contents/Resources/Referent_LogC4_to_Rec709.cube"
+test "$(shasum -a 256 "$BUNDLE/Contents/Resources/Referent_LogC4_to_Rec709.cube" | awk '{print $1}')" = "19b2feb5ed8cb767d980e9f9b351b6e1823a3990974277fdb4a46d1f709d251c"
 BIN="$BUNDLE/Contents/MacOS/KeystoneOFX"; if [ -f "$BIN" ]; then mv "$BIN" "$BUNDLE/Contents/MacOS/KeystoneOFX.ofx"; fi
 BIN="$BUNDLE/Contents/MacOS/KeystoneOFX.ofx"; test -f "$BIN"
 PLIST="$BUNDLE/Contents/Info.plist"; test -f "$PLIST"; test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")" = "KeystoneOFX.ofx"; plutil -lint "$PLIST"
