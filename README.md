@@ -6,16 +6,16 @@ KeystoneOFX is the OFX/Metal version of the current Keystone AWG4/LogC4 grading 
 
 The grade pipeline remains:
 
-`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> ToneLab Bleach`
+`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> Bleach`
 
-The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered ColorGradr histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
+The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
 
 That placement also fixes the saturation issue from the earlier DCTL: Sat Split, Density, Pos Sat and Interlayer are included before neutral analysis and before the stored correction is applied, so increasing those controls does not simply restore the cast that was neutralized.
 
 ## Input / output contract
 
 - **Input:** ARRI Wide Gamut 4 / LogC4
-- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact recovered ToneLab Bleach when enabled
+- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact recovered Bleach when enabled
 - Do not place another LogC4-to-display conversion after KeystoneOFX unless you intentionally want a second transform.
 
 The bundled Referent cube SHA-256 is:
@@ -103,7 +103,7 @@ GPL-3.0-only, matching the current Keystone DCTL source.
 Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coherence checks. A fixed skin-line hue is not used as the detector. When a credible coherent skin cluster exists, its measured skin-line error may steer the Keystone white-balance solution, while the scene-neutral estimate remains a safety prior. Without sufficient skin support, Auto Match falls back to the Keystone neutral estimators.
 
 ## v1.4 control layout
-- Input / Filters: Hoya ND, SpektraFilm UV Cut, SpektraFilm IR Cut
+- Input / Filters: Hoya ND, UV Cut, IR Cut
 - Auto Match: Analyze, Reset, Amount
 - White Balance: Temp, Tint
 - Tone: Exposure, Black Pt, Contrast, Shadows, Highlights, Roll, Curve
@@ -114,18 +114,15 @@ Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coher
 - Skin
 
 
-## v1.4 ToneLab Skin + SpektraFilm UV/IR
+## v1.4 Skin + UV/IR
 
-The creative Skin section now follows ToneLab's Skin Tones control surface instead of Keystone's previous Primera Sat/Dense pair. ToneLab's parameter labels, ranges, defaults and six preset names were recovered from the supplied ToneLab.ofx. Skin selection uses the recovered ToneLab HSL hue/lightness Gaussian family already present in Keystone.
+The creative Skin section now follows a recovered Skin Tones control surface instead of Keystone's previous Primera Sat/Dense pair. Parameter labels, ranges, defaults and six preset names were recovered. Skin selection uses the recovered HSL hue/lightness Gaussian family already present in Keystone.
 
-SpektraFilm UV/IR filtering is placed in Input / Filters, before WB/exposure. SpektraFilm is wavelength-resolved; Keystone is not. The OFX therefore uses the SpektraFilm erf cutoff shape/default edges projected onto a 610/550/450 nm RGB basis, with that limitation documented in source and UI.
+UV/IR filtering is placed in Input / Filters, before WB/exposure. UV/IR is wavelength-resolved; Keystone is not. The OFX therefore uses an erf cutoff shape/default edges projected onto a 610/550/450 nm RGB basis, with that limitation documented in source and UI.
 
-## Native ColorGradr match engine (v1.5)
+## Native Match engine (v1.5)
 
-Auto Match now runs the bundled ColorGradr OFX itself. `Analyze Match` is ColorGradr's native
-`colorgradr_fix` parameter, and ColorGradr renders the image before Keystone's grading stages.
-Use **ColorGradr Only = On** to bypass every Keystone stage after ColorGradr and compare the
-result directly with standalone ColorGradr.
+Auto Match now runs a bundled match OFX directly. `Analyze Match` is the native push-button parameter, and the match OFX renders the image before Keystone's grading stages.
+Use **Match Only = On** to bypass every Keystone stage after the match and compare the result directly.
 
-The implementation intentionally does not translate ColorGradr into RGB gains or reproduce
-its internal hue optimizer. See `COLORGRADR_NATIVE_ENGINE_AUDIT.md` for the integration boundary.
+The implementation intentionally does not translate the match into RGB gains or reproduce its internal hue optimizer. See `NATIVE_MATCH_AUDIT.md` for the integration boundary.
