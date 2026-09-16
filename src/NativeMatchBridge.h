@@ -1,7 +1,7 @@
 #pragma once
 #include "OpenFXMinimal.h"
 
-namespace colorgradr_bridge {
+namespace native_match_bridge {
 bool available();
 const char* lastError();
 void setHost(void* host);

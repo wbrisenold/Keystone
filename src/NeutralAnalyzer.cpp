@@ -25,7 +25,7 @@ static float hueDist(float a,float b){float d=std::fabs(a-b);return std::min(d,1
 // the primary objective. The scene-neutral estimate remains a sanity/fallback
 // reference rather than overriding the skin solution.
 static float3 rgbToYCbCr709(float3 rgb){
-  // Full-range BT.709 Y'CbCr. rgb is ToneLab-style Rec.709 / gamma 2.4.
+  // Full-range BT.709 Y'CbCr. rgb is Keystone-style Rec.709 / gamma 2.4.
   float y = 0.2126f*rgb.x + 0.7152f*rgb.y + 0.0722f*rgb.z;
   float cb = 0.5f + (rgb.z-y)/1.8556f;
   float cr = 0.5f + (rgb.x-y)/1.5748f;
@@ -49,7 +49,7 @@ static float3 skinDrivenGain(const float* src,int width,int height,int stride,co
     const float* px=src+(std::ptrdiff_t)y*stride+x*4;
     float3 lin=preNeutral(make_float3(px[0],px[1],px[2]),params);
     if(!(keystone_cpu::finitef(lin.x)&&keystone_cpu::finitef(lin.y)&&keystone_cpu::finitef(lin.z))) continue;
-    float3 rgb=ks_awg4_to_tl_rec709(lin); if(!(keystone_cpu::finitef(rgb.x)&&keystone_cpu::finitef(rgb.y)&&keystone_cpu::finitef(rgb.z))) continue;
+    float3 rgb=ks_awg4_to_ks_skin_rec709(lin); if(!(keystone_cpu::finitef(rgb.x)&&keystone_cpu::finitef(rgb.y)&&keystone_cpu::finitef(rgb.z))) continue;
     float3 yc=rgbToYCbCr709(rgb); float Y=yc.x,Cb=yc.y,Cr=yc.z;
     if(Y<.055f||Y>.94f) continue;
     // Broad human-skin envelope; adaptive clustering below chooses the actual
@@ -87,7 +87,7 @@ static float3 skinDrivenGain(const float* src,int width,int height,int stride,co
   supportOut=clampf((float)(skinW/18.0),0.f,1.f);
   if(ns<12||skinW<2.0){supportOut=improveOut=0.f;return fallback;}
 
-  auto score=[&](float3 g){double e=0,w=0;for(int i=0;i<ns;i++){float3 v=make_float3(ss[i].lin.x*g.x,ss[i].lin.y*g.y,ss[i].lin.z*g.z);float3 h=ks_rgb_to_hsv(logc4_encode(v));float d=hueDist(h.x,PRIMERA_SKIN_HUE_CENTER);e+=ss[i].w*d*d;w+=ss[i].w;}return (float)(e/std::max(w,1e-8));};
+  auto score=[&](float3 g){double e=0,w=0;for(int i=0;i<ns;i++){float3 v=make_float3(ss[i].lin.x*g.x,ss[i].lin.y*g.y,ss[i].lin.z*g.z);float3 h=ks_rgb_to_hsv(logc4_encode(v));float d=hueDist(h.x,keystone_skin_SKIN_HUE_CENTER);e+=ss[i].w*d*d;w+=ss[i].w;}return (float)(e/std::max(w,1e-8));};
   float base=score(make_float3(1,1,1)),best=1e9f;float3 bg=fallback;
   // Tighter search than v1.2: skin can steer WB, but cannot throw the entire
   // image toward purple/green. Neutral estimate remains a real safety prior.

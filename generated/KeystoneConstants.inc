@@ -1,15 +1,15 @@
-// Keystone v4.5.11 — LogC4 grading + original Referent LogC4 output + Genesis Interlayer + Contour color tools
+// Keystone v4.5.11 — LogC4 grading + original Keystone Output LogC4 output + Keystone Interlayer + Keystone color tools
 // Color Sep removed.
-// Adds Color / Interlayer using the recovered Genesis 5207 strength-dependent IIE polynomial term.
-// Adds recovered Contour 2.1.6 Density, Split Saturation, and Split Toning processing math.
-// Contour's 65^3 LUT export path, cube-render code, overlays, watermark code, and UI graph code are NOT included.
-// No Genesis LUTs, stock D-LogE tables, halation, or grain are embedded.
+// Adds Color / Interlayer using the recovered Keystone 5207 strength-dependent IIE polynomial term.
+// Adds recovered Keystone 2.1.6 Density, Split Saturation, and Split Toning processing math.
+// Keystone's 65^3 LUT export path, cube-render code, overlays, watermark code, and UI graph code are NOT included.
+// No Keystone LUTs, stock D-LogE tables, halation, or grain are embedded.
 // All Keystone grading stages remain in the established ARRI Wide Gamut 4 / LogC4 pipeline.
-// Final rendering uses the original user-supplied 33^3 Referent LogC4 -> Rec.709/BT.1886 LUT.
-// The original Referent lattice values are embedded unchanged; no hybrid output is used.
+// Final rendering uses the original user-supplied 33^3 Keystone Output LogC4 -> Rec.709/BT.1886 LUT.
+// The original Keystone Output lattice values are embedded unchanged; no hybrid output is used.
 // Keystone evaluates the lattice with its own trilinear sampler rather than Resolve's project LUT interpolation.
 // Out-of-domain LogC4 channels use boundary-cell linear extension to avoid hard cube-edge clipping.
-// Exact recovered ToneLab Bleach Bypass runs only after the Referent Rec.709 render.
+// Exact recovered Keystone Bleach Bypass runs only after the Keystone Output Rec.709 render.
 // No skin detection/protection is applied to Color / Bleach.
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -28,13 +28,13 @@
 #define AWG4_TO_XYZ_C2 make_float3(0.115837311473977f,-0.036001909116029f,1.089057750759878f)
 
 // ---- D65 reference white ----
-// Retained for OpenDRT Creative White and neutral-axis safety fallbacks.
+// Retained for Keystone Output Creative White and neutral-axis safety fallbacks.
 #define WHITE_D65 make_float3(0.9504559271f,1.0f,1.0890577508f)
 
 
-// ---- OpenDRT v1.1.0 Creative White CAT02 matrices (Jed Smith, GPLv3) ----
-// Source: uploaded OpenDRT.dctl / open-display-transform.
-// These are the exact D65 -> target-white matrices used by OpenDRT's Creative White selector.
+// ---- Keystone Output v1.1.0 Creative White CAT02 matrices (Jed Smith, GPLv3) ----
+// Source: uploaded Keystone Output.dctl / open-display-transform.
+// These are the exact D65 -> target-white matrices used by Keystone Output's Creative White selector.
 #define ODRT_D65_D93_R0 make_float3(0.95703423023223877f,-0.0247171502560377121f,0.0624028593301773071f)
 #define ODRT_D65_D93_R1 make_float3(-0.0179296955466270447f,0.990019857883453369f,0.0248119533061981201f)
 #define ODRT_D65_D93_R2 make_float3(0.00127589143812656403f,0.00427919067442417058f,1.29345715045928955f)
@@ -60,7 +60,7 @@
 #define XYZ_TO_AWG4_C1 make_float3(-0.250597345204380f,1.361245545929351f,0.000000000000000f)
 #define XYZ_TO_AWG4_C2 make_float3(-0.168811475294073f,0.097282942013729f,0.918224951158247f)
 
-// ---- Rec.709 / D65 bridge for the recovered ToneLab display-referred Basic block ----
+// ---- Rec.709 / D65 bridge for the recovered Keystone display-referred Basic block ----
 // Row-form matrices. Keystone remains LogC4/AWG4 overall; only the recovered
 // Fade temporarily works in Rec.709 gamma 2.4. Color Bleach is removed.
 #define XYZ_TO_REC709_R0 make_float3(3.2409699419045226f,-1.5373831775700940f,-0.4986107602930034f)
@@ -70,11 +70,11 @@
 #define REC709_TO_XYZ_R1 make_float3(0.2126390058715104f,0.7151686787677559f,0.0721923153607337f)
 #define REC709_TO_XYZ_R2 make_float3(0.0193308187155918f,0.1191947797946260f,0.9505321522496607f)
 
-// Recovered ToneLab skin-selection defaults.
-#define TL_SKIN_TARGET_HUE_DEG 20.0f
-#define TL_SKIN_RANGE_DEG 40.0f
-#define TL_SKIN_LIGHTNESS_CENTER 0.5f
-#define TL_SKIN_LIGHTNESS_WIDTH 0.4f
+// Recovered Keystone skin-selection defaults.
+#define KS_SKIN_SKIN_TARGET_HUE_DEG 20.0f
+#define KS_SKIN_SKIN_RANGE_DEG 40.0f
+#define KS_SKIN_SKIN_LIGHTNESS_CENTER 0.5f
+#define KS_SKIN_SKIN_LIGHTNESS_WIDTH 0.4f
 
 // ---- Legacy Keystone AWG3 bridge for color-tone presets only ----
 // These are the exact AWG3/XYZ matrices used by the older Keystone density-tone engine.
@@ -132,8 +132,8 @@
 // ---- Keystone source-derived working constants ----
 #define KS_LOG10_2 0.301029996f
 
-// ---- Genesis 5207 Interlayer / Interimage Effect ----
-// Exact recovered 3x10 polynomial coefficients for Kodak 5207. Genesis scales
+// ---- Keystone 5207 Interlayer / Interimage Effect ----
+// Exact recovered 3x10 polynomial coefficients for Kodak 5207. Keystone scales
 // only the quadratic terms (columns 3..8) with its Interlayer Effect strength.
 // Keystone intentionally imports only that strength-dependent term: the fixed
 // stock transform and measured D-LogE tables are NOT embedded.
@@ -172,10 +172,10 @@
 #define KS_INTERNAL_CURVE_AMOUNT 1.0f
 #define KS_INTERNAL_CREATIVE_WHITE_LIMIT 0.25f
 
-// ---- Original Referent LogC4 output — embedded exact 33^3 table ----
-// Source: user-supplied Referent_LogC4_to_Rec709.cube.
+// ---- Original Keystone Output LogC4 output — embedded exact 33^3 table ----
+// Source: user-supplied Keystone_Output_LogC4_to_Rec709.cube.
 // Original metadata: Input Color Space LogC4; Output BT.1886; Resolution 33x33x33.
-// Exact source lattice values are embedded unchanged. No Referent-only outputization,
+// Exact source lattice values are embedded unchanged. No Keystone Output-only outputization,
 // refit, resampling, or newly authored LUT data is used here.
 // Keystone fetches exact lattice nodes and performs its own trilinear interpolation.
 // Out-of-domain LogC4 channels use the same boundary-cell linear extension strategy

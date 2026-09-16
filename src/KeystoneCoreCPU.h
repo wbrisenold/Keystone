@@ -58,22 +58,22 @@ inline float3 preNeutral(float3 input,const Params& p){
   float3 lin=logc4_decode(input);
   { float3 repair_xyz=awg4_to_xyz(lin); repair_xyz=input_gamut_heal_xyz(repair_xyz); lin=xyz_to_awg4(repair_xyz); }
   int nd=p.ndFilter; if(nd<0||nd>11)nd=0;
-  if(nd!=0)lin=ks_apply_hoya_nd(lin,nd);
-  if(p.uvFilter||p.irFilter)lin=ks_apply_spektrafilm_uv_ir(lin,p.uvFilter,clampf(p.uvCutNm,350.0f,500.0f),p.irFilter,clampf(p.irCutNm,600.0f,800.0f));
+  if(nd!=0)lin=ks_apply_keystone_nd_nd(lin,nd);
+  if(p.uvFilter||p.irFilter)lin=ks_apply_keystone_filterfilm_uv_ir(lin,p.uvFilter,clampf(p.uvCutNm,350.0f,500.0f),p.irFilter,clampf(p.irCutNm,600.0f,800.0f));
   float wt=clampf(p.wbTemp,-100.0f,100.0f), wi=clampf(p.wbTint,-100.0f,100.0f);
   if(_fabs(wt)>1e-7f||_fabs(wi)>1e-7f)lin=ks_apply_opponent_wb_awg4(lin,wt,wi);
   float exp=clampf(p.exposure,-6.0f,6.0f);
   if(_fabs(exp)>1e-7f){float k=_powf(2.0f,exp);lin*=k;}
   float bp=clampf(p.blackPoint,-0.05f,0.05f);
-  if(_fabs(bp)>1e-9f)lin=primera_black_luma(lin,bp);
-  lin=primera_tone_luma(lin,clampf(p.contrast,0.5f,2.0f),clampf(p.shadows,-1.0f,1.0f),clampf(p.highlights,-1.0f,1.0f),clampf(p.roll,0.0f,2.0f));
+  if(_fabs(bp)>1e-9f)lin=keystone_skin_black_luma(lin,bp);
+  lin=keystone_skin_tone_luma(lin,clampf(p.contrast,0.5f,2.0f),clampf(p.shadows,-1.0f,1.0f),clampf(p.highlights,-1.0f,1.0f),clampf(p.roll,0.0f,2.0f));
   int curve=p.curvePreset;if(curve<0)curve=0;if(curve>4)curve=4;
   if(curve>0)lin=ks_apply_curve_preset(lin,curve,KS_INTERNAL_CURVE_AMOUNT);
   float ss=clampf(p.satSplit,0.5f,2.0f),den=clampf(p.density,0.0f,1.0f),ps=clampf(p.posSat,0.0f,1.0f),il=clampf(p.interlayer,0.0f,3.0f);
-  if(_fabs(ss-1.0f)>1e-7f){lin=ks_apply_contour_split_sat(lin,ss);lin=ks_soft_gamut_bend(lin);}
-  if(den>1e-7f){lin=ks_apply_contour_density(lin,den);lin=ks_soft_gamut_bend(lin);}
+  if(_fabs(ss-1.0f)>1e-7f){lin=ks_apply_keystone_tone_split_sat(lin,ss);lin=ks_soft_gamut_bend(lin);}
+  if(den>1e-7f){lin=ks_apply_keystone_tone_density(lin,den);lin=ks_soft_gamut_bend(lin);}
   if(ps>1e-7f){lin=apply_pos_sat_filmic(lin,ps);lin=ks_soft_gamut_bend(lin);}
-  if(il>1e-7f){lin=ks_apply_genesis_interlayer(lin,il);lin=ks_soft_gamut_bend(lin);}
+  if(il>1e-7f){lin=ks_apply_keystone_interlayer_interlayer(lin,il);lin=ks_soft_gamut_bend(lin);}
   return lin;
 }
 
@@ -87,7 +87,7 @@ inline float3 applyStoredNeutral(float3 lin,const Params& p){
 inline float3 lutFetch(const LutEntry* lut,int r,int g,int b){
   const auto &v=lut[r+33*(g+33*b)]; return make_float3(v.r,v.g,v.b);
 }
-inline float3 referentSample(float3 result,const LutEntry* lut){
+inline float3 output_transformSample(float3 result,const LutEntry* lut){
   float xr=result.x*32.0f,xg=result.y*32.0f,xb=result.z*32.0f;
   int r0,g0,b0;float fr,fg,fb;
   if(xr<=0){r0=0;fr=xr;}else if(xr>=32){r0=31;fr=xr-31;}else{r0=(int)_floorf(xr);if(r0>31)r0=31;fr=xr-r0;}
@@ -103,19 +103,19 @@ inline float3 referentSample(float3 result,const LutEntry* lut){
 inline float3 processPixel(float3 input,const Params& p,const LutEntry* lut){
   float3 lin=applyStoredNeutral(preNeutral(input,p),p);
   float sa=clampf(p.splitAmount,0.0f,2.0f);
-  if(sa>1e-7f){lin=ks_apply_contour_split_tone(lin,sa,clampf(p.splitShadowHue,0.0f,360.0f),clampf(p.splitHighlightHue,0.0f,360.0f),clampf(p.splitBalance,0.0f,1.0f),clampf(p.splitSubtractive,0.0f,1.0f));lin=ks_soft_gamut_bend(lin);}
+  if(sa>1e-7f){lin=ks_apply_keystone_tone_split_tone(lin,sa,clampf(p.splitShadowHue,0.0f,360.0f),clampf(p.splitHighlightHue,0.0f,360.0f),clampf(p.splitBalance,0.0f,1.0f),clampf(p.splitSubtractive,0.0f,1.0f));lin=ks_soft_gamut_bend(lin);}
   float hb=clampf(p.hiBleach,0.0f,1.0f),lb=clampf(p.loBleach,0.0f,1.0f);
   if(hb>1e-7f) lin=ks_highlight_bleach(lin,hb);
   if(lb>1e-7f) lin=ks_shadow_bleach(lin,lb);
-  float fade=clampf(p.fade,0.0f,100.0f)/100.0f;if(fade>1e-7f)lin=ks_apply_tonelab_fade(lin,fade);
+  float fade=clampf(p.fade,0.0f,100.0f)/100.0f;if(fade>1e-7f)lin=ks_apply_keystone_fade(lin,fade);
   int look=p.lookColor;if(look<0)look=0;if(look>11)look=11;float la=clampf(p.lookAmount,0.0f,1.5f);if(look>0&&la>1e-7f)lin=ks_apply_color_look(lin,look,la);
-  if(p.skinShowMask){float m=ks_tonelab_skin_mask_awg4(lin,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange);return make_float3(m,m,m);}
-  if(p.skinEnable)lin=ks_apply_tonelab_skin(lin,p.skinEnable,p.skinSaturate,p.skinColour,p.skinPop,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange,p.skinIntensity);
+  if(p.skinShowMask){float m=ks_keystone_skin_mask_awg4(lin,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange);return make_float3(m,m,m);}
+  if(p.skinEnable)lin=ks_apply_keystone_skin(lin,p.skinEnable,p.skinSaturate,p.skinColour,p.skinPop,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange,p.skinIntensity);
   float3 xyz=awg4_to_xyz(lin);int cw=p.creativeWhite;if(cw<0)cw=0;if(cw>5)cw=5;if(cw!=2){xyz=ks_apply_creative_white_xyz(xyz,cw,KS_INTERNAL_CREATIVE_WHITE_LIMIT);lin=xyz_to_awg4(xyz);}
   lin=technical_encoded_negative_guard(lin,xyz.y);xyz=awg4_to_xyz(lin);float3 cam=xyz_to_awg4(xyz);cam=technical_scene_ceiling_guard(cam);float currentY=awg4_to_xyz(cam).y;cam=technical_encoded_negative_guard(cam,currentY);float3 result=logc4_encode(cam);
   if(!(finitef(result.x)&&finitef(result.y)&&finitef(result.z)))result=(finitef(input.x)&&finitef(input.y)&&finitef(input.z))?input:make_float3(0,0,0);
-  float3 display=referentSample(result,lut);
-  float bleach=clampf(p.colorBleach,0.0f,80.0f)/100.0f;if(bleach>1e-8f)display=tl_bleach_bypass_exact(display,bleach);
+  float3 display=output_transformSample(result,lut);
+  float bleach=clampf(p.colorBleach,0.0f,80.0f)/100.0f;if(bleach>1e-8f)display=ks_skin_bleach_bypass_exact(display,bleach);
   return (finitef(display.x)&&finitef(display.y)&&finitef(display.z))?display:make_float3(0,0,0);
 }
 }
