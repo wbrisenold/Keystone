@@ -1,0 +1,6 @@
+build/
+dist/
+.DS_Store
+*.air
+*.metallib
+keystone_model_tests

@@ -1,0 +1,89 @@
+#pragma once
+#include <metal_stdlib>
+using namespace metal;
+
+#define __DEVICE__ inline
+#define make_float2(x,y) float2((x),(y))
+#define make_float3(x,y,z) float3((x),(y),(z))
+#define _powf pow
+#define _fabs fabs
+#define _fmaxf fmax
+#define _fminf fmin
+#define _logf log
+#define _log10f log10
+#define _log2f log2
+#define _expf exp
+#define _sqrtf sqrt
+#define _atan2f atan2
+#define _sinf sin
+#define _cosf cos
+#define _tanf tan
+#define _acosf acos
+#define _floorf floor
+#include "KeystoneConstants.inc"
+#include "KeystoneMath.inc"
+
+struct KeystoneMetalParams {
+  float neutralAmount;
+  float neutralGainR,neutralGainG,neutralGainB; float matchSlopeR,matchSlopeG,matchSlopeB,matchOffsetR,matchOffsetG,matchOffsetB;
+  int ndFilter;
+  int uvFilter; float uvCutNm; int irFilter; float irCutNm;
+  float wbTemp,wbTint;
+  float exposure,blackPoint,contrast,shadows,highlights,roll;
+  int curvePreset;
+  float density,posSat,interlayer,satSplit;
+  float splitAmount,splitShadowHue,splitHighlightHue,splitBalance,splitSubtractive;
+  float hiBleach,loBleach,colorBleach,fade;
+  int lookColor;
+  float lookAmount;
+  int creativeWhite;
+  int skinEnable,skinPreset; float skinSaturate,skinColour,skinPop,skinCenter,skinRange,skinBrightness,skinBrightnessRange; int skinShowMask; float skinIntensity;
+  int width,height,srcStrideFloats,dstStrideFloats;
+};
+
+inline float3 ksPreNeutral(float3 input,constant KeystoneMetalParams& p){
+  float3 lin=logc4_decode(input);
+  {float3 repair_xyz=awg4_to_xyz(lin);repair_xyz=input_gamut_heal_xyz(repair_xyz);lin=xyz_to_awg4(repair_xyz);}
+  int nd=p.ndFilter;if(nd<0||nd>11)nd=0;if(nd!=0)lin=ks_apply_hoya_nd(lin,nd);if(p.uvFilter||p.irFilter)lin=ks_apply_spektrafilm_uv_ir(lin,p.uvFilter,clampf(p.uvCutNm,350.0f,500.0f),p.irFilter,clampf(p.irCutNm,600.0f,800.0f));
+  float wt=clampf(p.wbTemp,-100.0f,100.0f),wi=clampf(p.wbTint,-100.0f,100.0f);
+  if(_fabs(wt)>1e-7f||_fabs(wi)>1e-7f)lin=ks_apply_opponent_wb_awg4(lin,wt,wi);
+  float ex=clampf(p.exposure,-6.0f,6.0f);if(_fabs(ex)>1e-7f){float k=_powf(2.0f,ex);lin*=k;}
+  float bp=clampf(p.blackPoint,-0.05f,0.05f);if(_fabs(bp)>1e-9f)lin=primera_black_luma(lin,bp);
+  lin=primera_tone_luma(lin,clampf(p.contrast,0.5f,2.0f),clampf(p.shadows,-1.0f,1.0f),clampf(p.highlights,-1.0f,1.0f),clampf(p.roll,0.0f,2.0f));
+  int curve=p.curvePreset;if(curve<0)curve=0;if(curve>4)curve=4;if(curve>0)lin=ks_apply_curve_preset(lin,curve,KS_INTERNAL_CURVE_AMOUNT);
+  float ss=clampf(p.satSplit,0.5f,2.0f),den=clampf(p.density,0.0f,1.0f),ps=clampf(p.posSat,0.0f,1.0f),il=clampf(p.interlayer,0.0f,3.0f);
+  if(_fabs(ss-1.0f)>1e-7f){lin=ks_apply_contour_split_sat(lin,ss);lin=ks_soft_gamut_bend(lin);}
+  if(den>1e-7f){lin=ks_apply_contour_density(lin,den);lin=ks_soft_gamut_bend(lin);}
+  if(ps>1e-7f){lin=apply_pos_sat_filmic(lin,ps);lin=ks_soft_gamut_bend(lin);}
+  if(il>1e-7f){lin=ks_apply_genesis_interlayer(lin,il);lin=ks_soft_gamut_bend(lin);}
+  return lin;
+}
+inline float3 ksApplyNeutral(float3 lin,constant KeystoneMetalParams& p){
+  float a=clampf(p.neutralAmount,0.0f,1.0f);if(a<=1e-7f)return lin;
+  float3 matched=float3(lin.x*p.neutralGainR,lin.y*p.neutralGainG,lin.z*p.neutralGainB);
+  return mix(lin,matched,a);
+}
+inline float3 ksLutFetch(device const float4* lut,int r,int g,int b){return lut[r+33*(g+33*b)].xyz;}
+inline float3 ksReferent(float3 v,device const float4* lut){
+  float xr=v.x*32.0f,xg=v.y*32.0f,xb=v.z*32.0f;int r0,g0,b0;float fr,fg,fb;
+  if(xr<=0){r0=0;fr=xr;}else if(xr>=32){r0=31;fr=xr-31;}else{r0=(int)_floorf(xr);if(r0>31)r0=31;fr=xr-r0;}
+  if(xg<=0){g0=0;fg=xg;}else if(xg>=32){g0=31;fg=xg-31;}else{g0=(int)_floorf(xg);if(g0>31)g0=31;fg=xg-g0;}
+  if(xb<=0){b0=0;fb=xb;}else if(xb>=32){b0=31;fb=xb-31;}else{b0=(int)_floorf(xb);if(b0>31)b0=31;fb=xb-b0;}
+  int r1=r0+1,g1=g0+1,b1=b0+1;
+  float3 c000=ksLutFetch(lut,r0,g0,b0),c100=ksLutFetch(lut,r1,g0,b0),c010=ksLutFetch(lut,r0,g1,b0),c110=ksLutFetch(lut,r1,g1,b0);
+  float3 c001=ksLutFetch(lut,r0,g0,b1),c101=ksLutFetch(lut,r1,g0,b1),c011=ksLutFetch(lut,r0,g1,b1),c111=ksLutFetch(lut,r1,g1,b1);
+  return mix3(mix3(mix3(c000,c100,fr),mix3(c010,c110,fr),fg),mix3(mix3(c001,c101,fr),mix3(c011,c111,fr),fg),fb);
+}
+inline float3 ksProcess(float3 input,constant KeystoneMetalParams& p,device const float4* lut){
+  float3 lin=ksApplyNeutral(ksPreNeutral(input,p),p);
+  float sa=clampf(p.splitAmount,0.0f,2.0f);if(sa>1e-7f){lin=ks_apply_contour_split_tone(lin,sa,clampf(p.splitShadowHue,0.0f,360.0f),clampf(p.splitHighlightHue,0.0f,360.0f),clampf(p.splitBalance,0.0f,1.0f),clampf(p.splitSubtractive,0.0f,1.0f));lin=ks_soft_gamut_bend(lin);}
+  float hb=clampf(p.hiBleach,0.0f,1.0f),lb=clampf(p.loBleach,0.0f,1.0f);if(hb>1e-7f)lin=ks_highlight_bleach(lin,hb);if(lb>1e-7f)lin=ks_shadow_bleach(lin,lb);
+  float fade=clampf(p.fade,0.0f,100.0f)/100.0f;if(fade>1e-7f)lin=ks_apply_tonelab_fade(lin,fade);
+  int look=p.lookColor;if(look<0)look=0;if(look>11)look=11;float la=clampf(p.lookAmount,0.0f,1.5f);if(look>0&&la>1e-7f)lin=ks_apply_color_look(lin,look,la);
+  if(p.skinShowMask){float m=ks_tonelab_skin_mask_awg4(lin,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange);return float3(m,m,m);}
+  if(p.skinEnable)lin=ks_apply_tonelab_skin(lin,p.skinEnable,p.skinSaturate,p.skinColour,p.skinPop,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange,p.skinIntensity);
+  float3 xyz=awg4_to_xyz(lin);int cw=p.creativeWhite;if(cw<0)cw=0;if(cw>5)cw=5;if(cw!=2){xyz=ks_apply_creative_white_xyz(xyz,cw,KS_INTERNAL_CREATIVE_WHITE_LIMIT);lin=xyz_to_awg4(xyz);}
+  lin=technical_encoded_negative_guard(lin,xyz.y);xyz=awg4_to_xyz(lin);float3 cam=xyz_to_awg4(xyz);cam=technical_scene_ceiling_guard(cam);float currentY=awg4_to_xyz(cam).y;cam=technical_encoded_negative_guard(cam,currentY);float3 result=logc4_encode(cam);
+  if(!(finitef(result.x)&&finitef(result.y)&&finitef(result.z)))result=(finitef(input.x)&&finitef(input.y)&&finitef(input.z))?input:float3(0.0f);
+  float3 display=ksReferent(result,lut);float bleach=clampf(p.colorBleach,0.0f,80.0f)/100.0f;if(bleach>1e-8f)display=tl_bleach_bypass_exact(display,bleach);return (finitef(display.x)&&finitef(display.y)&&finitef(display.z))?display:float3(0.0f);
+}
