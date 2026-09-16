@@ -1,10 +1,11 @@
 #include "NativeMatchBridge.h"
 #include <string>
 #include <mutex>
+#include <cstdio>
 #ifdef __APPLE__
 #include <dlfcn.h>
-#include <limits.h>
-#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #endif
 
 namespace native_match_bridge {
@@ -18,28 +19,36 @@ using GetCountFn=int(*)();
 using GetPluginFn=OfxPlugin*(*)(int);
 
 static std::string dirname(std::string p){auto n=p.find_last_of('/');return n==std::string::npos?std::string():p.substr(0,n);}
+static void logLine(const std::string& s){if(FILE* f=std::fopen("/tmp/KeystoneOFX-loader.log","a")){std::fprintf(f,"%s\n",s.c_str());std::fclose(f);}}
 static bool tryLoad(const std::string& path){
   gLib=dlopen(path.c_str(),RTLD_LAZY|RTLD_LOCAL);
-  if(!gLib){const char* e=dlerror();gError=e?e:"dlopen failed";return false;}
+  if(!gLib){const char* e=dlerror();gError=e?e:"dlopen failed";logLine("NativeMatch dlopen failed: "+gError);return false;}
   auto count=(GetCountFn)dlsym(gLib,"OfxGetNumberOfPlugins");
   auto get=(GetPluginFn)dlsym(gLib,"OfxGetPlugin");
-  if(!count||!get||count()<1){gError="Native Match OFX entry points missing";dlclose(gLib);gLib=nullptr;return false;}
+  if(!count||!get||count()<1){gError="Native Match OFX entry points missing";logLine(gError);dlclose(gLib);gLib=nullptr;return false;}
   gPlugin=get(0);
-  if(!gPlugin||!gPlugin->mainEntry||!gPlugin->setHost){gError="Native Match plugin descriptor invalid";dlclose(gLib);gLib=nullptr;gPlugin=nullptr;return false;}
+  if(!gPlugin||!gPlugin->mainEntry||!gPlugin->setHost){gError="Native Match plugin descriptor invalid";logLine(gError);dlclose(gLib);gLib=nullptr;gPlugin=nullptr;return false;}
+  logLine("NativeMatch engine loaded");
   return true;
 }
 static void ensureLoaded(){
   if(gPlugin||gLib)return;
   Dl_info info{};
-  if(dladdr((void*)&ensureLoaded,&info)&&info.dli_fname){
-    // dladdr points at KeystoneOFX.ofx in <bundle>/Contents/MacOS.
-    // Walk explicitly to Contents, then Resources; do not depend on the process CWD.
-    std::string macos=dirname(info.dli_fname);
-    std::string contents=dirname(macos);
-    std::string embedded=contents+"/Resources/NativeMatch/NativeMatch.ofx.bundle/Contents/MacOS/NativeMatch.ofx";
-    if(tryLoad(embedded))return;
+  if(!(dladdr((void*)&ensureLoaded,&info)&&info.dli_fname)){gError="Unable to resolve Keystone bundle path";logLine(gError);return;}
+  std::string macos=dirname(info.dli_fname);
+  std::string contents=dirname(macos);
+  std::string dir=contents+"/Resources/NativeMatch/NativeMatch.ofx.bundle/Contents/MacOS";
+  DIR* d=opendir(dir.c_str());
+  if(!d){gError="Embedded Native Match MacOS directory missing";logLine(gError+": "+dir);return;}
+  while(dirent* ent=readdir(d)){
+    if(!ent->d_name||ent->d_name[0]=='.')continue;
+    std::string candidate=dir+"/"+ent->d_name;
+    struct stat st{}; if(stat(candidate.c_str(),&st)!=0||!S_ISREG(st.st_mode))continue;
+    if(tryLoad(candidate)){closedir(d);return;}
   }
-  gError="Unable to load bundled or installed Native Match OFX";
+  closedir(d);
+  if(gError.empty())gError="No loadable embedded Native Match executable found";
+  logLine(gError);
 }
 #else
 static void ensureLoaded(){gError="Native Match bridge only loads on macOS";}

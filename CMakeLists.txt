@@ -17,10 +17,10 @@ if(APPLE)
   target_link_libraries(KeystoneOFX PRIVATE "-framework Foundation" "-framework Metal" "-framework QuartzCore")
   set_target_properties(KeystoneOFX PROPERTIES PREFIX "" SUFFIX ".ofx" BUNDLE TRUE BUNDLE_EXTENSION "ofx.bundle" MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/src/Info.plist.in)
   add_custom_command(TARGET KeystoneOFX POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:KeystoneOFX>/Contents/Resources/NativeMatch"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-      "${CMAKE_CURRENT_SOURCE_DIR}/vendor/NativeMatch/NativeMatch.ofx.bundle"
-      "$<TARGET_BUNDLE_DIR:KeystoneOFX>/Contents/Resources/NativeMatch/NativeMatch.ofx.bundle")
+    COMMAND ${CMAKE_COMMAND}
+      -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DBUNDLE_DIR=$<TARGET_BUNDLE_DIR:KeystoneOFX>
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedNativeMatch.cmake)
 else()
   set_target_properties(KeystoneOFX PROPERTIES PREFIX "" SUFFIX ".ofx")
 endif()
