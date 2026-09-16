@@ -64,7 +64,7 @@ inline float3 ksApplyNeutral(float3 lin,constant KeystoneMetalParams& p){
   return mix(lin,matched,a);
 }
 inline float3 ksLutFetch(device const float4* lut,int r,int g,int b){return lut[r+33*(g+33*b)].xyz;}
-inline float3 ksKeystone Output(float3 v,device const float4* lut){
+inline float3 ksKeystoneOutput(float3 v,device const float4* lut){
   float xr=v.x*32.0f,xg=v.y*32.0f,xb=v.z*32.0f;int r0,g0,b0;float fr,fg,fb;
   if(xr<=0){r0=0;fr=xr;}else if(xr>=32){r0=31;fr=xr-31;}else{r0=(int)_floorf(xr);if(r0>31)r0=31;fr=xr-r0;}
   if(xg<=0){g0=0;fg=xg;}else if(xg>=32){g0=31;fg=xg-31;}else{g0=(int)_floorf(xg);if(g0>31)g0=31;fg=xg-g0;}
@@ -85,5 +85,5 @@ inline float3 ksProcess(float3 input,constant KeystoneMetalParams& p,device cons
   float3 xyz=awg4_to_xyz(lin);int cw=p.creativeWhite;if(cw<0)cw=0;if(cw>5)cw=5;if(cw!=2){xyz=ks_apply_creative_white_xyz(xyz,cw,KS_INTERNAL_CREATIVE_WHITE_LIMIT);lin=xyz_to_awg4(xyz);}
   lin=technical_encoded_negative_guard(lin,xyz.y);xyz=awg4_to_xyz(lin);float3 cam=xyz_to_awg4(xyz);cam=technical_scene_ceiling_guard(cam);float currentY=awg4_to_xyz(cam).y;cam=technical_encoded_negative_guard(cam,currentY);float3 result=logc4_encode(cam);
   if(!(finitef(result.x)&&finitef(result.y)&&finitef(result.z)))result=(finitef(input.x)&&finitef(input.y)&&finitef(input.z))?input:float3(0.0f);
-  float3 display=ksKeystone Output(result,lut);float bleach=clampf(p.colorBleach,0.0f,80.0f)/100.0f;if(bleach>1e-8f)display=ks_skin_bleach_bypass_exact(display,bleach);return (finitef(display.x)&&finitef(display.y)&&finitef(display.z))?display:float3(0.0f);
+  float3 display=ksKeystoneOutput(result,lut);float bleach=clampf(p.colorBleach,0.0f,80.0f)/100.0f;if(bleach>1e-8f)display=ks_skin_bleach_bypass_exact(display,bleach);return (finitef(display.x)&&finitef(display.y)&&finitef(display.z))?display:float3(0.0f);
 }
