@@ -8,7 +8,7 @@ if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 add_library(KeystoneOFX MODULE
-  src/KeystoneOFX.cpp src/KeystoneCPU.cpp src/NeutralAnalyzer.cpp src/LutLoader.cpp src/MetalBridge.mm)
+  src/KeystoneOFX.cpp src/KeystoneCPU.cpp src/NeutralAnalyzer.cpp src/LutLoader.cpp src/MetalBridge.mm src/NativeMatchBridge.cpp)
 target_include_directories(KeystoneOFX PRIVATE src generated)
 target_compile_options(KeystoneOFX PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror=return-type>
@@ -16,6 +16,11 @@ target_compile_options(KeystoneOFX PRIVATE
 if(APPLE)
   target_link_libraries(KeystoneOFX PRIVATE "-framework Foundation" "-framework Metal" "-framework QuartzCore")
   set_target_properties(KeystoneOFX PROPERTIES PREFIX "" SUFFIX ".ofx" BUNDLE TRUE BUNDLE_EXTENSION "ofx.bundle" MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/src/Info.plist.in)
+  add_custom_command(TARGET KeystoneOFX POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DBUNDLE_DIR=$<TARGET_BUNDLE_DIR:KeystoneOFX>
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedNativeMatch.cmake)
 else()
   set_target_properties(KeystoneOFX PROPERTIES PREFIX "" SUFFIX ".ofx")
 endif()

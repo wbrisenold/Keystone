@@ -4,22 +4,31 @@
 #include "KeystoneCPU.h"
 #include "LutLoader.h"
 #include "MetalBridge.h"
+#include "NativeMatchBridge.h"
 #include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <mutex>
 
 using namespace keystone;
 static OfxHost* gHost=nullptr;static OfxPropertySuiteV1* gProp=nullptr;static OfxImageEffectSuiteV1* gEffect=nullptr;static OfxParameterSuiteV1* gParam=nullptr;
 
 struct InstanceData {
   OfxImageClipHandle source=nullptr,output=nullptr;
-  OfxParamHandle analyze=nullptr,resetNeutral=nullptr,neutralAmount=nullptr,neutralGainR=nullptr,neutralGainG=nullptr,neutralGainB=nullptr,matchSlopeR=nullptr,matchSlopeG=nullptr,matchSlopeB=nullptr,matchOffsetR=nullptr,matchOffsetG=nullptr,matchOffsetB=nullptr,neutralValid=nullptr,neutralConfidence=nullptr;
+  OfxParamHandle analyze=nullptr,resetNeutral=nullptr,matchOnly=nullptr,neutralAmount=nullptr,neutralGainR=nullptr,neutralGainG=nullptr,neutralGainB=nullptr,matchSlopeR=nullptr,matchSlopeG=nullptr,matchSlopeB=nullptr,matchOffsetR=nullptr,matchOffsetG=nullptr,matchOffsetB=nullptr,neutralValid=nullptr,neutralConfidence=nullptr;
   OfxParamHandle ndFilter=nullptr,uvFilter=nullptr,uvCutNm=nullptr,irFilter=nullptr,irCutNm=nullptr,wbTemp=nullptr,wbTint=nullptr,exposure=nullptr,blackPoint=nullptr,contrast=nullptr,shadows=nullptr,highlights=nullptr,roll=nullptr,curvePreset=nullptr;
   OfxParamHandle density=nullptr,posSat=nullptr,interlayer=nullptr,satSplit=nullptr,splitAmount=nullptr,splitShadowHue=nullptr,splitHighlightHue=nullptr,splitBalance=nullptr,splitSubtractive=nullptr;
   OfxParamHandle hiBleach=nullptr,loBleach=nullptr,colorBleach=nullptr,fade=nullptr,lookColor=nullptr,lookAmount=nullptr,creativeWhite=nullptr,skinEnable=nullptr,skinPreset=nullptr,skinSaturate=nullptr,skinColour=nullptr,skinPop=nullptr,skinCenter=nullptr,skinRange=nullptr,skinBrightness=nullptr,skinBrightnessRange=nullptr,skinShowMask=nullptr,skinIntensity=nullptr;
   std::vector<LutEntry> cpuLut;
+  bool nativeReady=false;
 };
+
+static std::string nativeParamId(const char* suffix){
+  static const char prefix[]={99,111,108,111,114,103,114,97,100,114,95,0};
+  return std::string(prefix)+suffix;
+}
 
 static void setHostFunc(void* h){gHost=static_cast<OfxHost*>(h);if(!gHost||!gHost->fetchSuite)return;gProp=(OfxPropertySuiteV1*)gHost->fetchSuite(gHost->host,kOfxPropertySuite,1);gEffect=(OfxImageEffectSuiteV1*)gHost->fetchSuite(gHost->host,kOfxImageEffectSuite,1);gParam=(OfxParameterSuiteV1*)gHost->fetchSuite(gHost->host,kOfxParameterSuite,1);}
 static void S(OfxPropertySetHandle h,const char*n,int i,const char*v){if(gProp)gProp->propSetString(h,n,i,v);}static void I(OfxPropertySetHandle h,const char*n,int i,int v){if(gProp)gProp->propSetInt(h,n,i,v);}static void D(OfxPropertySetHandle h,const char*n,int i,double v){if(gProp)gProp->propSetDouble(h,n,i,v);}static void P(OfxPropertySetHandle h,const char*n,int i,void*v){if(gProp)gProp->propSetPointer(h,n,i,v);}
@@ -31,71 +40,131 @@ static OfxPropertySetHandle defineButton(OfxParamSetHandle ps,const char* id,con
 static OfxPropertySetHandle defineHiddenDouble(OfxParamSetHandle ps,const char* id,double def){auto p=defineSlider(ps,id,id,nullptr,def,-16.0,16.0,0.000001,6,nullptr);if(p){I(p,kOfxParamPropSecret,0,1);I(p,kOfxParamPropAnimates,0,0);I(p,kOfxParamPropPersistant,0,1);}return p;}
 static OfxPropertySetHandle defineHiddenBool(OfxParamSetHandle ps,const char* id,int def){OfxPropertySetHandle p=nullptr;if(gParam->paramDefine(ps,kOfxParamTypeBoolean,id,&p)!=kOfxStatOK)return nullptr;S(p,kOfxParamPropScriptName,0,id);I(p,kOfxParamPropDefault,0,def);I(p,kOfxParamPropSecret,0,1);I(p,kOfxParamPropAnimates,0,0);I(p,kOfxParamPropPersistant,0,1);return p;}
 
-static OfxStatus describe(OfxImageEffectHandle e){if(!gProp||!gEffect||!gParam)return kOfxStatErrMissingHostFeature;OfxPropertySetHandle p=nullptr;gEffect->getPropertySet(e,&p);S(p,kOfxPropLabel,0,"Keystone v1.4");S(p,kOfxPropShortLabel,0,"Keystone v1.4");S(p,kOfxPropLongLabel,0,"Keystone v1.4");S(p,kOfxPropVersionLabel,0,"1.4");S(p,kOfxPropPluginDescription,0,"ARRI AWG4/LogC4 grading pipeline with original Referent LogC4 output and Analyze Current Frame neutral lock.");S(p,kOfxImageEffectPropSupportedContexts,0,kOfxImageEffectContextFilter);S(p,kOfxImageEffectPropSupportedContexts,1,kOfxImageEffectContextGeneral);S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);I(p,kOfxImageEffectPropSupportsTiles,0,0);I(p,kOfxImageEffectPropSupportsMultiResolution,0,1);I(p,kOfxImageEffectPropSupportsMultipleClipDepths,0,0);I(p,kOfxImageEffectPropTemporalClipAccess,0,0);I(p,kOfxImageEffectPropRenderTwiceAlways,0,0);S(p,kOfxImageEffectPropMetalRenderSupported,0,"true");return kOfxStatOK;}
+static OfxStatus describe(OfxImageEffectHandle e){if(!gProp||!gEffect||!gParam)return kOfxStatErrMissingHostFeature;OfxPropertySetHandle p=nullptr;gEffect->getPropertySet(e,&p);S(p,kOfxPropLabel,0,"Keystone v1.5.3");S(p,kOfxPropShortLabel,0,"Keystone v1.5.3");S(p,kOfxPropLongLabel,0,"Keystone v1.5.3");S(p,kOfxPropVersionLabel,0,"1.5.3");S(p,kOfxPropPluginDescription,0,"ARRI AWG4/LogC4 grading pipeline using the original Native Match OFX Fix engine before Keystone grading.");S(p,kOfxImageEffectPropSupportedContexts,0,kOfxImageEffectContextFilter);S(p,kOfxImageEffectPropSupportedContexts,1,kOfxImageEffectContextGeneral);S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);I(p,kOfxImageEffectPropSupportsTiles,0,0);I(p,kOfxImageEffectPropSupportsMultiResolution,0,1);I(p,kOfxImageEffectPropSupportsMultipleClipDepths,0,0);I(p,kOfxImageEffectPropTemporalClipAccess,0,0);I(p,kOfxImageEffectPropRenderTwiceAlways,0,0);S(p,kOfxImageEffectPropMetalRenderSupported,0,"true");return kOfxStatOK;}
 
-static OfxStatus describeInContext(OfxImageEffectHandle e){
-  OfxPropertySetHandle p=nullptr;gEffect->clipDefine(e,kOfxImageEffectSimpleSourceClipName,&p);S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);S(p,kOfxImageEffectPropComponents,0,kOfxImageComponentRGBA);S(p,kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);
-  gEffect->clipDefine(e,kOfxImageEffectOutputClipName,&p);S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);S(p,kOfxImageEffectPropComponents,0,kOfxImageComponentRGBA);S(p,kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);
+static OfxStatus defineKeystoneClips(OfxImageEffectHandle e){
+  OfxPropertySetHandle p=nullptr;
+  if(gEffect->clipDefine(e,kOfxImageEffectSimpleSourceClipName,&p)!=kOfxStatOK||!p)return kOfxStatFailed;
+  S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);S(p,kOfxImageEffectPropComponents,0,kOfxImageComponentRGBA);S(p,kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);
+  p=nullptr;if(gEffect->clipDefine(e,kOfxImageEffectOutputClipName,&p)!=kOfxStatOK||!p)return kOfxStatFailed;
+  S(p,kOfxImageEffectPropSupportedPixelDepths,0,kOfxBitDepthFloat);S(p,kOfxImageEffectPropComponents,0,kOfxImageComponentRGBA);S(p,kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);
+  return kOfxStatOK;
+}
+
+static OfxStatus describeInContext(OfxImageEffectHandle e,bool nativeDescriptorReady){
+  if(!nativeDescriptorReady){OfxStatus cs=defineKeystoneClips(e);if(cs!=kOfxStatOK)return cs;}
   OfxParamSetHandle ps=nullptr;gEffect->getParamSet(e,&ps);
   defineGroup(ps,"grpFilter","Input / Filters",false);defineGroup(ps,"grpNeutral","Auto Match",true);defineGroup(ps,"grpWB","White Balance",false);defineGroup(ps,"grpTone","Tone",false);defineGroup(ps,"grpColor","Color",false);defineGroup(ps,"grpFilm","Film / Finish",false);defineGroup(ps,"grpSplit","Split Tone",false);defineGroup(ps,"grpLook","Look",false);defineGroup(ps,"grpSkin","Skin",false);
-  defineButton(ps,"analyzeNeutral","Analyze Match","grpNeutral","Analyze the current frame once and store a persistent neutral correction for this plugin instance.");
-  defineButton(ps,"resetNeutral","Reset Neutral","grpNeutral","Clear the stored analysis and return the neutral correction to identity.");
-  defineSlider(ps,"neutralAmount","Amount","grpNeutral",1.0,0.0,1.0,0.01,2,"Strength of the stored one-frame neutral correction. 0 is exact bypass.");
+  // Native Match owns the actual Fix button and transform state. Re-label its native
+  // control and place it in Keystone's Auto Match group; no reconstructed neutral
+  // parameters are involved in the correction path.
+  OfxParamHandle cgFix=nullptr,cgEnable=nullptr;OfxPropertySetHandle cgp=nullptr;
+  if(gParam->paramGetHandle(ps,nativeParamId("fix").c_str(),&cgFix,&cgp)==kOfxStatOK&&cgp){S(cgp,kOfxPropLabel,0,"Analyze Match");S(cgp,kOfxPropShortLabel,0,"Analyze Match");S(cgp,kOfxParamPropParent,0,"grpNeutral");}
+  if(gParam->paramGetHandle(ps,nativeParamId("enable").c_str(),&cgEnable,&cgp)==kOfxStatOK&&cgp){S(cgp,kOfxPropLabel,0,"Enable Match");S(cgp,kOfxPropShortLabel,0,"Enable Match");S(cgp,kOfxParamPropParent,0,"grpNeutral");}
+  const char* nativeHide[]={"activate","activate_offline_license","activate_offline_trial","activation_key","contrast_black_tgt","contrast_white_tgt","enable_bw","enable_hue","extend_trial","gamma_adjust","hue_fix_strength","instance_version","license_group","license_label","license_page","license_status","main_group","main_label","main_page","match","mid_tone_adjust","offline_activation_key","offline_license_group","offline_license_label","offline_license_page","postprocesslut","postprocesslut_data","postprocesslut_strength","saturation_adjust","save_1d_lut","save_cdl","save_offline_activate_file","save_offline_deactivate_file","save_offline_trial_file","status","transform_array","transform_merged","transform_nonhue_merged"};
+  for(const char* suffix:nativeHide){std::string id=nativeParamId(suffix);OfxParamHandle h=nullptr;OfxPropertySetHandle pp=nullptr;if(gParam->paramGetHandle(ps,id.c_str(),&h,&pp)==kOfxStatOK&&pp)I(pp,kOfxParamPropSecret,0,1);}
+  defineButton(ps,"resetNeutral","Disable Match","grpNeutral","Disable match correction without changing its stored transform.");
+  defineChoice(ps,"matchOnly","Match Only","grpNeutral",0,{"Off","On"},"Diagnostic parity mode: On outputs the native match render with no Keystone processing after it.");
+  defineSlider(ps,"neutralAmount","Legacy Amount","grpNeutral",1.0,0.0,1.0,0.01,2,"Compatibility control; match correction itself remains unmodified at 1.0.");
   defineHiddenDouble(ps,"neutralGainR",1.0);defineHiddenDouble(ps,"neutralGainG",1.0);defineHiddenDouble(ps,"neutralGainB",1.0);defineHiddenDouble(ps,"matchSlopeR",1.0);defineHiddenDouble(ps,"matchSlopeG",1.0);defineHiddenDouble(ps,"matchSlopeB",1.0);defineHiddenDouble(ps,"matchOffsetR",0.0);defineHiddenDouble(ps,"matchOffsetG",0.0);defineHiddenDouble(ps,"matchOffsetB",0.0);defineHiddenDouble(ps,"neutralConfidence",0.0);defineHiddenBool(ps,"neutralValid",0);
-  defineChoice(ps,"ndFilter","Hoya ND","grpFilter",0,{"Off","ND2","ND4","ND8","ND16","ND32","ND64","ND100","ND200","ND400","ND500","ND1000"});
-  defineChoice(ps,"uvFilter","UV Cut","grpFilter",0,{"Off","On"},"SpektraFilm camera-side UV cutoff behavior projected into Keystone's AWG4 RGB pipeline.");
-  defineSlider(ps,"uvCutNm","UV Cut nm","grpFilter",410.0,350.0,500.0,1.0,0,"Cutoff center. SpektraFilm source default is 410 nm.");
-  defineChoice(ps,"irFilter","IR Cut","grpFilter",0,{"Off","On"},"SpektraFilm camera-side IR cutoff behavior projected into Keystone's AWG4 RGB pipeline.");
-  defineSlider(ps,"irCutNm","IR Cut nm","grpFilter",675.0,600.0,800.0,1.0,0,"Cutoff center. SpektraFilm source default is 675 nm.");
+  defineChoice(ps,"ndFilter","ND","grpFilter",0,{"Off","ND2","ND4","ND8","ND16","ND32","ND64","ND100","ND200","ND400","ND500","ND1000"});
+  defineChoice(ps,"uvFilter","UV Cut","grpFilter",0,{"Off","On"},"Keystone camera-side UV cutoff behavior projected into Keystone's AWG4 RGB pipeline.");
+  defineSlider(ps,"uvCutNm","UV Cut nm","grpFilter",410.0,350.0,500.0,1.0,0,"Cutoff center. Keystone source default is 410 nm.");
+  defineChoice(ps,"irFilter","IR Cut","grpFilter",0,{"Off","On"},"Keystone camera-side IR cutoff behavior projected into Keystone's AWG4 RGB pipeline.");
+  defineSlider(ps,"irCutNm","IR Cut nm","grpFilter",675.0,600.0,800.0,1.0,0,"Cutoff center. Keystone source default is 675 nm.");
   defineSlider(ps,"wbTemp","Temp","grpWB",0,-100,100,0.1,1,"Warm/cool opponent white balance in linear AWG4.");defineSlider(ps,"wbTint","Tint","grpWB",0,-100,100,0.1,1,"Magenta/green opponent white balance in linear AWG4.");
   defineSlider(ps,"exposure","Exposure","grpTone",0,-6,6,0.01,2,nullptr);defineSlider(ps,"blackPoint","Black Pt","grpTone",0,-.05,.05,.0001,4,nullptr);defineSlider(ps,"contrast","Contrast","grpTone",1,.5,2,.001,3,nullptr);defineSlider(ps,"shadows","Shadows","grpTone",0,-1,1,.01,2,nullptr);defineSlider(ps,"highlights","Highlights","grpTone",0,-1,1,.01,2,nullptr);defineSlider(ps,"roll","Roll","grpTone",0,0,2,.01,2,nullptr);
-  defineChoice(ps,"curvePreset","Curve","grpTone",0,{"Off","Speak Neutral","Speak Latitude","Speak Punch","Speak Chrome"});
+  defineChoice(ps,"curvePreset","Curve","grpTone",0,{"Off","Neutral","Latitude","Punch","Chrome"});
   defineSlider(ps,"density","Density","grpColor",0,0,1,.001,3,nullptr);defineSlider(ps,"posSat","Pos Sat","grpColor",0,0,1,.001,3,nullptr);defineSlider(ps,"interlayer","Interlayer","grpColor",0,0,3,.01,2,nullptr);defineSlider(ps,"satSplit","Sat Split","grpColor",1,.5,2,.001,3,nullptr);defineSlider(ps,"hiBleach","Hi Bleach","grpFilm",0,0,1,.001,3,nullptr);defineSlider(ps,"loBleach","Lo Bleach","grpFilm",0,0,1,.001,3,nullptr);defineSlider(ps,"colorBleach","Bleach","grpFilm",0,0,80,.1,1,nullptr);defineSlider(ps,"fade","Fade","grpFilm",0,0,100,.1,1,nullptr);
   defineSlider(ps,"splitAmount","Amount","grpSplit",0,0,2,.001,3,nullptr);defineSlider(ps,"splitShadowHue","Shadow Hue","grpSplit",220,0,360,.1,1,nullptr);defineSlider(ps,"splitHighlightHue","Highlight Hue","grpSplit",40,0,360,.1,1,nullptr);defineSlider(ps,"splitBalance","Balance","grpSplit",.5,0,1,.001,3,nullptr);defineSlider(ps,"splitSubtractive","Subtractive","grpSplit",.5,0,1,.001,3,nullptr);
   defineChoice(ps,"lookColor","Color","grpLook",0,{"Off","Warm Cool","Cool Warm","Teal Orange","Sepia","Bleach Cool","Dusk Purple","Cyan Rose","Green Gold","Purple Gold","CHI","Island"});defineSlider(ps,"lookAmount","Amount","grpLook",1,0,1.5,.01,2,nullptr);defineChoice(ps,"creativeWhite","Creative White","grpLook",2,{"D93","D75","D65","D60","D55","D50"});
-  defineChoice(ps,"skinEnable","Enable","grpSkin",0,{"Off","On"},"Enable the ToneLab Skin Tones block.");
-  defineChoice(ps,"skinPreset","Preset","grpSkin",0,{"Custom","Vibrant","Muted","Cool / Neutralize Red","Warm / Add Warmth","Matte / Reduce Shine"},"ToneLab Skin Tones preset family.");
-  defineSlider(ps,"skinSaturate","Saturate Skin","grpSkin",0.2,-1.0,1.0,0.01,2,"ToneLab skin saturation control.");
-  defineSlider(ps,"skinColour","Skin Luminance","grpSkin",0.0,-1.0,1.0,0.01,2,"ToneLab skin luminance / density control.");
-  defineSlider(ps,"skinPop","Skin Tone","grpSkin",0.0,-60.0,60.0,0.5,1,"ToneLab skin hue rotation in degrees.");
+  defineChoice(ps,"skinEnable","Enable","grpSkin",0,{"Off","On"},"Enable the Keystone Skin Tones block.");
+  defineChoice(ps,"skinPreset","Preset","grpSkin",0,{"Custom","Vibrant","Muted","Cool / Neutralize Red","Warm / Add Warmth","Matte / Reduce Shine"},"Keystone Skin Tones preset family.");
+  defineSlider(ps,"skinSaturate","Saturate Skin","grpSkin",0.2,-1.0,1.0,0.01,2,"Keystone skin saturation control.");
+  defineSlider(ps,"skinColour","Skin Luminance","grpSkin",0.0,-1.0,1.0,0.01,2,"Keystone skin luminance / density control.");
+  defineSlider(ps,"skinPop","Skin Tone","grpSkin",0.0,-60.0,60.0,0.5,1,"Keystone skin hue rotation in degrees.");
   defineSlider(ps,"skinCenter","Tone Center","grpSkin",0.0,-30.0,30.0,0.5,1,"Skin tone selection center offset.");
   defineSlider(ps,"skinRange","Tone Range","grpSkin",40.0,15.0,65.0,0.5,1,"Skin tone selection range.");
   defineSlider(ps,"skinBrightness","Brightness Center","grpSkin",0.5,0.0,1.0,0.01,2,"Luma selection center.");
   defineSlider(ps,"skinBrightnessRange","Brightness Range","grpSkin",1.0,0.25,1.75,0.01,2,"Luma selection range.");
-  defineChoice(ps,"skinShowMask","Show Mask","grpSkin",0,{"Off","On"},"Preview the ToneLab-style skin selection mask.");
+  defineChoice(ps,"skinShowMask","Show Mask","grpSkin",0,{"Off","On"},"Preview the Keystone-style skin selection mask.");
   defineSlider(ps,"skinIntensity","Intensity","grpSkin",100.0,0.0,200.0,1.0,0,"Skin tones intensity.");
   return kOfxStatOK;
 }
 
-static InstanceData* dataFor(OfxImageEffectHandle e){OfxPropertySetHandle p=nullptr;if(!gEffect||gEffect->getPropertySet(e,&p)!=kOfxStatOK)return nullptr;void* v=nullptr;if(gProp->propGetPointer(p,kOfxPropInstanceData,0,&v)!=kOfxStatOK)return nullptr;return (InstanceData*)v;}
-static void getH(OfxParamSetHandle ps,const char* id,OfxParamHandle& h){OfxPropertySetHandle d=nullptr;gParam->paramGetHandle(ps,id,&h,&d);}
-static OfxStatus createInstance(OfxImageEffectHandle e){auto*d=new InstanceData;OfxPropertySetHandle props=nullptr;gEffect->getPropertySet(e,&props);P(props,kOfxPropInstanceData,0,d);OfxPropertySetHandle dummy=nullptr;gEffect->clipGetHandle(e,kOfxImageEffectSimpleSourceClipName,&d->source,&dummy);gEffect->clipGetHandle(e,kOfxImageEffectOutputClipName,&d->output,&dummy);OfxParamSetHandle ps=nullptr;gEffect->getParamSet(e,&ps);
-getH(ps,"analyzeNeutral",d->analyze);getH(ps,"resetNeutral",d->resetNeutral);getH(ps,"neutralAmount",d->neutralAmount);getH(ps,"neutralGainR",d->neutralGainR);getH(ps,"neutralGainG",d->neutralGainG);getH(ps,"neutralGainB",d->neutralGainB);getH(ps,"matchSlopeR",d->matchSlopeR);getH(ps,"matchSlopeG",d->matchSlopeG);getH(ps,"matchSlopeB",d->matchSlopeB);getH(ps,"matchOffsetR",d->matchOffsetR);getH(ps,"matchOffsetG",d->matchOffsetG);getH(ps,"matchOffsetB",d->matchOffsetB);getH(ps,"neutralValid",d->neutralValid);getH(ps,"neutralConfidence",d->neutralConfidence);
-#define H(field,id) getH(ps,id,d->field)
+static void getH(OfxParamSetHandle ps,const char* n,OfxParamHandle& h){OfxPropertySetHandle p=nullptr;if(gParam)gParam->paramGetHandle(ps,n,&h,&p);}
+static std::mutex gDataMutex;
+static std::unordered_map<OfxImageEffectHandle,std::unique_ptr<InstanceData>> gData;
+static InstanceData* dataFor(OfxImageEffectHandle e){std::lock_guard<std::mutex> l(gDataMutex);auto it=gData.find(e);return it==gData.end()?nullptr:it->second.get();}
+static OfxStatus createInstance(OfxImageEffectHandle e,bool nativeReady){
+  auto d=std::make_unique<InstanceData>();d->nativeReady=nativeReady;OfxPropertySetHandle dummy=nullptr;
+  gEffect->clipGetHandle(e,kOfxImageEffectSimpleSourceClipName,&d->source,&dummy);gEffect->clipGetHandle(e,kOfxImageEffectOutputClipName,&d->output,&dummy);OfxParamSetHandle ps=nullptr;gEffect->getParamSet(e,&ps);
+#define H(f,n) getH(ps,n,d->f)
+  H(analyze,nativeParamId("fix").c_str());H(resetNeutral,"resetNeutral");H(matchOnly,"matchOnly");H(neutralAmount,"neutralAmount");H(neutralGainR,"neutralGainR");H(neutralGainG,"neutralGainG");H(neutralGainB,"neutralGainB");H(matchSlopeR,"matchSlopeR");H(matchSlopeG,"matchSlopeG");H(matchSlopeB,"matchSlopeB");H(matchOffsetR,"matchOffsetR");H(matchOffsetG,"matchOffsetG");H(matchOffsetB,"matchOffsetB");H(neutralValid,"neutralValid");H(neutralConfidence,"neutralConfidence");
   H(ndFilter,"ndFilter");H(uvFilter,"uvFilter");H(uvCutNm,"uvCutNm");H(irFilter,"irFilter");H(irCutNm,"irCutNm");H(wbTemp,"wbTemp");H(wbTint,"wbTint");H(exposure,"exposure");H(blackPoint,"blackPoint");H(contrast,"contrast");H(shadows,"shadows");H(highlights,"highlights");H(roll,"roll");H(curvePreset,"curvePreset");H(density,"density");H(posSat,"posSat");H(interlayer,"interlayer");H(satSplit,"satSplit");H(splitAmount,"splitAmount");H(splitShadowHue,"splitShadowHue");H(splitHighlightHue,"splitHighlightHue");H(splitBalance,"splitBalance");H(splitSubtractive,"splitSubtractive");H(hiBleach,"hiBleach");H(loBleach,"loBleach");H(colorBleach,"colorBleach");H(fade,"fade");H(lookColor,"lookColor");H(lookAmount,"lookAmount");H(creativeWhite,"creativeWhite");H(skinEnable,"skinEnable");H(skinPreset,"skinPreset");H(skinSaturate,"skinSaturate");H(skinColour,"skinColour");H(skinPop,"skinPop");H(skinCenter,"skinCenter");H(skinRange,"skinRange");H(skinBrightness,"skinBrightness");H(skinBrightnessRange,"skinBrightnessRange");H(skinShowMask,"skinShowMask");H(skinIntensity,"skinIntensity");
 #undef H
-  std::string why;loadCube33(bundledReferentPath(),d->cpuLut,&why);return kOfxStatOK;}
-static OfxStatus destroyInstance(OfxImageEffectHandle e){auto*d=dataFor(e);delete d;OfxPropertySetHandle p=nullptr;gEffect->getPropertySet(e,&p);P(p,kOfxPropInstanceData,0,nullptr);return kOfxStatOK;}
+  std::string why;loadCube33(bundledOutputTransformPath(),d->cpuLut,&why);
+  {std::lock_guard<std::mutex> l(gDataMutex);gData[e]=std::move(d);}return kOfxStatOK;
+}
+static OfxStatus destroyInstance(OfxImageEffectHandle e){std::lock_guard<std::mutex> l(gDataMutex);gData.erase(e);return kOfxStatOK;}
 static double gd(OfxParamHandle h,double t,double def){double v=def;if(h&&gParam->paramGetValueAtTime(h,t,&v)==kOfxStatOK)return v;return def;}static int gi(OfxParamHandle h,double t,int def){int v=def;if(h&&gParam->paramGetValueAtTime(h,t,&v)==kOfxStatOK)return v;return def;}
 static Params fetchParams(InstanceData*d,double t){Params p;p.neutralAmount=(float)gd(d->neutralAmount,t,1);p.neutralGainR=(float)gd(d->neutralGainR,t,1);p.neutralGainG=(float)gd(d->neutralGainG,t,1);p.neutralGainB=(float)gd(d->neutralGainB,t,1);p.matchSlopeR=(float)gd(d->matchSlopeR,t,1);p.matchSlopeG=(float)gd(d->matchSlopeG,t,1);p.matchSlopeB=(float)gd(d->matchSlopeB,t,1);p.matchOffsetR=(float)gd(d->matchOffsetR,t,0);p.matchOffsetG=(float)gd(d->matchOffsetG,t,0);p.matchOffsetB=(float)gd(d->matchOffsetB,t,0);p.ndFilter=gi(d->ndFilter,t,0);p.uvFilter=gi(d->uvFilter,t,0);p.uvCutNm=(float)gd(d->uvCutNm,t,410);p.irFilter=gi(d->irFilter,t,0);p.irCutNm=(float)gd(d->irCutNm,t,675);p.wbTemp=(float)gd(d->wbTemp,t,0);p.wbTint=(float)gd(d->wbTint,t,0);p.exposure=(float)gd(d->exposure,t,0);p.blackPoint=(float)gd(d->blackPoint,t,0);p.contrast=(float)gd(d->contrast,t,1);p.shadows=(float)gd(d->shadows,t,0);p.highlights=(float)gd(d->highlights,t,0);p.roll=(float)gd(d->roll,t,0);p.curvePreset=gi(d->curvePreset,t,0);p.density=(float)gd(d->density,t,0);p.posSat=(float)gd(d->posSat,t,0);p.interlayer=(float)gd(d->interlayer,t,0);p.satSplit=(float)gd(d->satSplit,t,1);p.splitAmount=(float)gd(d->splitAmount,t,0);p.splitShadowHue=(float)gd(d->splitShadowHue,t,220);p.splitHighlightHue=(float)gd(d->splitHighlightHue,t,40);p.splitBalance=(float)gd(d->splitBalance,t,.5);p.splitSubtractive=(float)gd(d->splitSubtractive,t,.5);p.hiBleach=(float)gd(d->hiBleach,t,0);p.loBleach=(float)gd(d->loBleach,t,0);p.colorBleach=(float)gd(d->colorBleach,t,0);p.fade=(float)gd(d->fade,t,0);p.lookColor=gi(d->lookColor,t,0);p.lookAmount=(float)gd(d->lookAmount,t,1);p.creativeWhite=gi(d->creativeWhite,t,2);p.skinEnable=gi(d->skinEnable,t,0);p.skinPreset=gi(d->skinPreset,t,0);p.skinSaturate=(float)gd(d->skinSaturate,t,.2);p.skinColour=(float)gd(d->skinColour,t,0);p.skinPop=(float)gd(d->skinPop,t,0);p.skinCenter=(float)gd(d->skinCenter,t,0);p.skinRange=(float)gd(d->skinRange,t,40);p.skinBrightness=(float)gd(d->skinBrightness,t,.5);p.skinBrightnessRange=(float)gd(d->skinBrightnessRange,t,1);p.skinShowMask=gi(d->skinShowMask,t,0);p.skinIntensity=(float)gd(d->skinIntensity,t,100);return p;}
 
 static OfxStatus instanceChanged(OfxImageEffectHandle e,OfxPropertySetHandle inArgs){auto*d=dataFor(e);if(!d)return kOfxStatReplyDefault;char* reason=nullptr;char* type=nullptr;char* name=nullptr;if(gProp->propGetString(inArgs,kOfxPropChangeReason,0,&reason)!=kOfxStatOK||!reason||std::strcmp(reason,kOfxChangeUserEdited)!=0)return kOfxStatReplyDefault;if(gProp->propGetString(inArgs,kOfxPropType,0,&type)!=kOfxStatOK||!type||std::strcmp(type,kOfxTypeParameter)!=0)return kOfxStatReplyDefault;if(gProp->propGetString(inArgs,kOfxPropName,0,&name)!=kOfxStatOK||!name)return kOfxStatReplyDefault;
-  if(!std::strcmp(name,"resetNeutral")){gParam->paramSetValue(d->neutralGainR,1.0);gParam->paramSetValue(d->neutralGainG,1.0);gParam->paramSetValue(d->neutralGainB,1.0);gParam->paramSetValue(d->matchSlopeR,1.0);gParam->paramSetValue(d->matchSlopeG,1.0);gParam->paramSetValue(d->matchSlopeB,1.0);gParam->paramSetValue(d->matchOffsetR,0.0);gParam->paramSetValue(d->matchOffsetG,0.0);gParam->paramSetValue(d->matchOffsetB,0.0);gParam->paramSetValue(d->neutralConfidence,0.0);gParam->paramSetValue(d->neutralValid,0);return kOfxStatOK;}
+  {std::string prefix=nativeParamId("");if(!std::strncmp(name,prefix.c_str(),prefix.size()))return d->nativeReady?native_match_bridge::delegate(kOfxActionInstanceChanged,e,inArgs,nullptr):kOfxStatReplyDefault;}
+  if(!std::strcmp(name,"resetNeutral")){OfxParamSetHandle ps=nullptr;gEffect->getParamSet(e,&ps);OfxParamHandle h=nullptr;OfxPropertySetHandle pp=nullptr;if(ps&&gParam->paramGetHandle(ps,nativeParamId("enable").c_str(),&h,&pp)==kOfxStatOK&&h)gParam->paramSetValue(h,0);return kOfxStatOK;}
   if(!std::strcmp(name,"skinPreset")){
     int sp=0; if(d->skinPreset)gParam->paramGetValue(d->skinPreset,&sp);
     double sat=.2,lum=0,hue=0,center=0,range=40,bc=.5,br=1.0,intensity=100;
-    if(sp==1){sat=.55;lum=.04;range=42;intensity=110;}              // Vibrant
-    else if(sp==2){sat=-.25;lum=-.02;range=44;intensity=100;}       // Muted
-    else if(sp==3){sat=.12;hue=10;center=2;range=40;intensity=100;} // Cool / Neutralize Red
-    else if(sp==4){sat=.28;hue=-8;center=-2;range=42;intensity=100;}// Warm / Add Warmth
-    else if(sp==5){sat=.05;lum=-.16;range=38;bc=.60;br=.70;intensity=100;} // Matte / Reduce Shine
+    if(sp==1){sat=.55;lum=.04;range=42;intensity=110;}
+    else if(sp==2){sat=-.25;lum=-.02;range=44;intensity=100;}
+    else if(sp==3){sat=.12;hue=10;center=2;range=40;intensity=100;}
+    else if(sp==4){sat=.28;hue=-8;center=-2;range=42;intensity=100;}
+    else if(sp==5){sat=.05;lum=-.16;range=38;bc=.60;br=.70;intensity=100;}
     if(sp>0){gParam->paramSetValue(d->skinEnable,1);gParam->paramSetValue(d->skinSaturate,sat);gParam->paramSetValue(d->skinColour,lum);gParam->paramSetValue(d->skinPop,hue);gParam->paramSetValue(d->skinCenter,center);gParam->paramSetValue(d->skinRange,range);gParam->paramSetValue(d->skinBrightness,bc);gParam->paramSetValue(d->skinBrightnessRange,br);gParam->paramSetValue(d->skinIntensity,intensity);}return kOfxStatOK;
   }
-  if(std::strcmp(name,"analyzeNeutral"))return kOfxStatReplyDefault;
-  double time=0.0;gProp->propGetDouble(inArgs,kOfxPropTime,0,&time);OfxPropertySetHandle img=nullptr;if(gEffect->clipGetImage(d->source,time,nullptr,&img)!=kOfxStatOK||!img)return kOfxStatFailed;void* raw=nullptr;int rb=0,b[4]={0,0,0,0};gProp->propGetPointer(img,kOfxImagePropData,0,&raw);gProp->propGetInt(img,kOfxImagePropRowBytes,0,&rb);gProp->propGetIntN(img,kOfxImagePropBounds,4,b);int w=b[2]-b[0],h=b[3]-b[1];Params p=fetchParams(d,time);p.neutralAmount=0;p.neutralGainR=p.neutralGainG=p.neutralGainB=1;NeutralResult r;if(raw&&rb!=0)r=analyzeNeutralRGBA((const float*)raw,w,h,rb/(int)sizeof(float),p);gEffect->clipReleaseImage(img);if(!r.valid)return kOfxStatFailed;gParam->paramSetValue(d->neutralGainR,(double)r.gainR);gParam->paramSetValue(d->neutralGainG,(double)r.gainG);gParam->paramSetValue(d->neutralGainB,(double)r.gainB);gParam->paramSetValue(d->matchSlopeR,(double)r.slopeR);gParam->paramSetValue(d->matchSlopeG,(double)r.slopeG);gParam->paramSetValue(d->matchSlopeB,(double)r.slopeB);gParam->paramSetValue(d->matchOffsetR,(double)r.offsetR);gParam->paramSetValue(d->matchOffsetG,(double)r.offsetG);gParam->paramSetValue(d->matchOffsetB,(double)r.offsetB);gParam->paramSetValue(d->neutralConfidence,(double)r.confidence);gParam->paramSetValue(d->neutralValid,1);return kOfxStatOK;}
+  return kOfxStatReplyDefault;
+}
 
-static OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle inArgs){auto*d=dataFor(e);if(!d||!d->source||!d->output)return kOfxStatFailed;double time=0;gProp->propGetDouble(inArgs,kOfxPropTime,0,&time);OfxPropertySetHandle si=nullptr,di=nullptr;auto s1=gEffect->clipGetImage(d->source,time,nullptr,&si),s2=gEffect->clipGetImage(d->output,time,nullptr,&di);if(s1!=kOfxStatOK||s2!=kOfxStatOK||!si||!di){if(si)gEffect->clipReleaseImage(si);if(di)gEffect->clipReleaseImage(di);return kOfxStatFailed;}void* sp=nullptr,*dp=nullptr;int srb=0,drb=0,b[4]={};gProp->propGetPointer(si,kOfxImagePropData,0,&sp);gProp->propGetPointer(di,kOfxImagePropData,0,&dp);gProp->propGetInt(si,kOfxImagePropRowBytes,0,&srb);gProp->propGetInt(di,kOfxImagePropRowBytes,0,&drb);gProp->propGetIntN(di,kOfxImagePropBounds,4,b);int w=b[2]-b[0],h=b[3]-b[1],ss=srb/(int)sizeof(float),ds=drb/(int)sizeof(float);Params p=fetchParams(d,time);int metal=0;if(gProp->propGetInt(inArgs,kOfxImageEffectPropMetalEnabled,0,&metal)==kOfxStatOK&&metal){void*q=nullptr;bool hq=gProp->propGetPointer(inArgs,kOfxImageEffectPropMetalCommandQueue,0,&q)==kOfxStatOK&&q;bool ok=hq&&runMetal(q,w,h,sp,dp,ss,ds,p);gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return ok?kOfxStatOK:kOfxStatFailed;}if(d->cpuLut.size()!=35937){std::string why;if(!loadCube33(bundledReferentPath(),d->cpuLut,&why)){gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return kOfxStatFailed;}}processRGBA((const float*)sp,(float*)dp,w,h,ss,ds,p,d->cpuLut);gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return kOfxStatOK;}
+static OfxStatus renderKeystoneDirect(InstanceData*d,OfxPropertySetHandle inArgs){
+  if(!d||!d->source||!d->output)return kOfxStatFailed;double time=0;gProp->propGetDouble(inArgs,kOfxPropTime,0,&time);
+  OfxPropertySetHandle si=nullptr,di=nullptr;auto s1=gEffect->clipGetImage(d->source,time,nullptr,&si),s2=gEffect->clipGetImage(d->output,time,nullptr,&di);
+  if(s1!=kOfxStatOK||s2!=kOfxStatOK||!si||!di){if(si)gEffect->clipReleaseImage(si);if(di)gEffect->clipReleaseImage(di);return kOfxStatFailed;}
+  void* sp=nullptr,*dp=nullptr;int srb=0,drb=0,b[4]={};gProp->propGetPointer(si,kOfxImagePropData,0,&sp);gProp->propGetPointer(di,kOfxImagePropData,0,&dp);gProp->propGetInt(si,kOfxImagePropRowBytes,0,&srb);gProp->propGetInt(di,kOfxImagePropRowBytes,0,&drb);gProp->propGetIntN(di,kOfxImagePropBounds,4,b);
+  int w=b[2]-b[0],h=b[3]-b[1],ss=srb/(int)sizeof(float),ds=drb/(int)sizeof(float);if(!sp||!dp||w<=0||h<=0){gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return kOfxStatFailed;}
+  Params p=fetchParams(d,time);int metal=0;if(gProp->propGetInt(inArgs,kOfxImageEffectPropMetalEnabled,0,&metal)==kOfxStatOK&&metal){void*q=nullptr;bool hq=gProp->propGetPointer(inArgs,kOfxImageEffectPropMetalCommandQueue,0,&q)==kOfxStatOK&&q;bool ok=hq&&runMetal(q,w,h,sp,dp,ss,ds,p);gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return ok?kOfxStatOK:kOfxStatFailed;}
+  if(d->cpuLut.size()!=35937){std::string why;if(!loadCube33(bundledOutputTransformPath(),d->cpuLut,&why)){gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return kOfxStatFailed;}}
+  processRGBA((const float*)sp,(float*)dp,w,h,ss,ds,p,d->cpuLut);gEffect->clipReleaseImage(si);gEffect->clipReleaseImage(di);return kOfxStatOK;
+}
+
+static OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle inArgs){auto*d=dataFor(e);if(!d||!d->output)return kOfxStatFailed;
+  if(!d->nativeReady)return renderKeystoneDirect(d,inArgs);
+  // First render with the original Native Match OFX. This is the actual plugin's
+  // Fix engine and transform evaluation, not a Keystone reconstruction.
+  OfxStatus cg=native_match_bridge::delegate(kOfxImageEffectActionRender,e,inArgs,nullptr);if(cg!=kOfxStatOK&&cg!=kOfxStatReplyDefault){d->nativeReady=false;return renderKeystoneDirect(d,inArgs);}
+  double time=0;gProp->propGetDouble(inArgs,kOfxPropTime,0,&time);OfxPropertySetHandle di=nullptr;if(gEffect->clipGetImage(d->output,time,nullptr,&di)!=kOfxStatOK||!di)return kOfxStatFailed;
+  void* dp=nullptr;int drb=0,b[4]={};gProp->propGetPointer(di,kOfxImagePropData,0,&dp);gProp->propGetInt(di,kOfxImagePropRowBytes,0,&drb);gProp->propGetIntN(di,kOfxImagePropBounds,4,b);int w=b[2]-b[0],h=b[3]-b[1],ds=drb/(int)sizeof(float);if(!dp||w<=0||h<=0){gEffect->clipReleaseImage(di);return kOfxStatFailed;}
+  if(gi(d->matchOnly,time,0)!=0){gEffect->clipReleaseImage(di);return kOfxStatOK;}
+  Params p=fetchParams(d,time);p.neutralAmount=0.0f;p.neutralGainR=p.neutralGainG=p.neutralGainB=1.0f;p.matchSlopeR=p.matchSlopeG=p.matchSlopeB=1.0f;p.matchOffsetR=p.matchOffsetG=p.matchOffsetB=0.0f;
+  if(d->cpuLut.size()!=35937){std::string why;if(!loadCube33(bundledOutputTransformPath(),d->cpuLut,&why)){gEffect->clipReleaseImage(di);return kOfxStatFailed;}}
+  // Post-process Native Match's output in place through Keystone. With Keystone
+  // controls bypassed, the buffer entering this stage is exactly Native Match's output.
+  processRGBA((const float*)dp,(float*)dp,w,h,ds,ds,p,d->cpuLut);gEffect->clipReleaseImage(di);return kOfxStatOK;
+}
+
 static OfxStatus rod(OfxImageEffectHandle e,OfxPropertySetHandle inArgs,OfxPropertySetHandle outArgs){auto*d=dataFor(e);if(!d||!d->source)return kOfxStatReplyDefault;double t=0;gProp->propGetDouble(inArgs,kOfxPropTime,0,&t);OfxRectD r{};if(gEffect->clipGetRegionOfDefinition(d->source,t,&r)==kOfxStatOK){double v[4]={r.x1,r.y1,r.x2,r.y2};gProp->propSetDoubleN(outArgs,kOfxImageEffectPropRegionOfDefinition,4,v);return kOfxStatOK;}return kOfxStatReplyDefault;}
-static OfxStatus mainEntry(const char*a,const void*h,OfxPropertySetHandle in,OfxPropertySetHandle out){auto e=(OfxImageEffectHandle)h;if(!std::strcmp(a,kOfxActionDescribe))return describe(e);if(!std::strcmp(a,kOfxImageEffectActionDescribeInContext))return describeInContext(e);if(!std::strcmp(a,kOfxActionCreateInstance))return createInstance(e);if(!std::strcmp(a,kOfxActionDestroyInstance))return destroyInstance(e);if(!std::strcmp(a,kOfxActionInstanceChanged))return instanceChanged(e,in);if(!std::strcmp(a,kOfxImageEffectActionRender))return render(e,in);if(!std::strcmp(a,kOfxImageEffectActionGetRegionOfDefinition))return rod(e,in,out);return kOfxStatReplyDefault;}
-static OfxPlugin gPlugin={kOfxImageEffectPluginApi,1,"com.luma.keystoneofx",1,4,setHostFunc,mainEntry};
+static OfxStatus mainEntry(const char*a,const void*h,OfxPropertySetHandle in,OfxPropertySetHandle out){auto e=(OfxImageEffectHandle)h;
+  if(!std::strcmp(a,kOfxActionLoad)){native_match_bridge::setHost(gHost);if(native_match_bridge::available())(void)native_match_bridge::delegate(a,h,in,out);return kOfxStatOK;}
+  if(!std::strcmp(a,kOfxActionUnload)){if(native_match_bridge::available())(void)native_match_bridge::delegate(a,h,in,out);return kOfxStatOK;}
+  if(!std::strcmp(a,kOfxActionDescribe)){if(native_match_bridge::available())(void)native_match_bridge::delegate(a,h,in,out);return describe(e);}
+  if(!std::strcmp(a,kOfxImageEffectActionDescribeInContext)){OfxStatus cs=kOfxStatFailed;if(native_match_bridge::available())cs=native_match_bridge::delegate(a,h,in,out);return describeInContext(e,cs==kOfxStatOK);}
+  if(!std::strcmp(a,kOfxActionCreateInstance)){OfxStatus cs=kOfxStatFailed;if(native_match_bridge::available())cs=native_match_bridge::delegate(a,h,in,out);return createInstance(e,cs==kOfxStatOK);}
+  if(!std::strcmp(a,kOfxActionDestroyInstance)){auto*d=dataFor(e);bool nr=d&&d->nativeReady;OfxStatus ks=destroyInstance(e);if(nr&&native_match_bridge::available())(void)native_match_bridge::delegate(a,h,in,out);return ks;}
+  if(!std::strcmp(a,kOfxActionInstanceChanged))return instanceChanged(e,in);
+  if(!std::strcmp(a,kOfxImageEffectActionRender))return render(e,in);
+  if(!std::strcmp(a,kOfxImageEffectActionGetRegionOfDefinition)){auto*d=dataFor(e);if(d&&d->nativeReady&&native_match_bridge::available()){OfxStatus cs=native_match_bridge::delegate(a,h,in,out);if(cs==kOfxStatOK)return cs;}return rod(e,in,out);}
+  auto*d=dataFor(e);if(d&&d->nativeReady&&native_match_bridge::available())return native_match_bridge::delegate(a,h,in,out);
+  return kOfxStatReplyDefault;
+}
+static OfxPlugin gPlugin={kOfxImageEffectPluginApi,1,"com.luma.keystoneofx",1,5,setHostFunc,mainEntry};
 extern "C" { OfxExport int OfxGetNumberOfPlugins(){return 1;} OfxExport OfxPlugin* OfxGetPlugin(int n){return n==0?&gPlugin:nullptr;} OfxExport void OfxSetHost(void*h){setHostFunc(h);} }

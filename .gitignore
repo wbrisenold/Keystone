@@ -4,5 +4,3 @@ dist/
 *.air
 *.metallib
 keystone_model_tests
-artifact/
-KeystoneOFX-macOS-universal/

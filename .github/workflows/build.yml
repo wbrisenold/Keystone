@@ -27,6 +27,8 @@ jobs:
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
             -c src/KeystoneOFX.cpp -o KeystoneOFX.o
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
+            -c src/NativeMatchBridge.cpp -o NativeMatchBridge.o
 
   macos-build:
     runs-on: macos-15
