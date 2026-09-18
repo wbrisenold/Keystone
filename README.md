@@ -1,136 +1,74 @@
-# KeystoneOFX
+# KeystoneOFX — Region Grade build
 
-KeystoneOFX is the OFX/Metal version of the current Keystone AWG4/LogC4 grading pipeline. It keeps the original user-supplied `Referent_LogC4_to_Rec709.cube` as the final output transform and adds a **real one-frame Auto Neutral lock** that a DCTL cannot persist.
+This branch starts from the last known-good pre-port Keystone v1.6.0 LoadSafe source. The original load-safe architecture is preserved: one Keystone OFX binary, CPU rendering, no nested plug-ins, no inference runtime, no sidecar, and no new load-time dependency.
 
-## What changed from the DCTL
+## Region Grade
 
-The grade pipeline remains:
+Region Grade adds local controls without replacing Keystone's grading pipeline.
 
-`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> Bleach`
+Regions:
+- Subject
+- Background
+- Sky
+- Foliage / Trees
+- Water
+- Ground
+- Terrain
+- Built Environment
 
-The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
+Controls:
+- Exposure
+- Contrast
+- Saturation
+- Temperature
+- Amount
+- Feather
+- Show Mask
 
-That placement also fixes the saturation issue from the earlier DCTL: Sat Split, Density, Pos Sat and Interlayer are included before neutral analysis and before the stored correction is applied, so increasing those controls does not simply restore the cast that was neutralized.
+The local grade is applied in AWG4 scene-linear after Auto Match and the existing global tone/color preparation, before Keystone's split-tone/look/finish stages.
 
-## Input / output contract
+### How the masks work
 
-- **Input:** ARRI Wide Gamut 4 / LogC4
-- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's Bleach stage when enabled
-- Do not place another LogC4-to-display conversion after KeystoneOFX unless you intentionally want a second transform.
+This build intentionally does not add a neural-network runtime. Region masks are generated inside Keystone from image math already available to the plugin:
 
-The bundled Referent cube SHA-256 is:
+- Subject combines Keystone skin evidence with a soft spatial/body expansion around detected skin.
+- Background is the inverse of the subject mask.
+- Sky uses upper-frame position, blue/cyan chroma, brightness, and a bright-neutral cloud allowance.
+- Foliage / Trees uses green chroma evidence.
+- Water uses cyan/blue chroma separated from likely sky by frame position.
+- Terrain uses brown/earth chroma and lower-frame evidence.
+- Ground uses lower-frame evidence while excluding stronger foliage, water, and subject evidence.
+- Built Environment is the remaining low-chroma/background structure after stronger semantic-style regions are removed.
 
-`19b2feb5ed8cb767d980e9f9b351b6e1823a3990974277fdb4a46d1f709d251c`
+These are heuristic masks, not object-recognition AI. **Show Mask** is included so the selection can be judged before grading.
 
-The build checks this hash before packaging.
+## Auto Match
 
-## Auto Neutral workflow
+Press **Analyze Match** on a representative frame. Keystone analyzes that frame once and stores the correction in the effect instance. **Reset Neutral** clears it.
 
-1. Put the playhead on a representative frame for the shot.
-2. Set the Keystone controls that occur before Neutral first: ND, manual WB, tone, curve, Sat Split, Density, Pos Sat and Interlayer.
-3. Open **Auto Neutral** and press **Analyze Current Frame**.
-4. The calculated correction is stored in hidden persistent OFX parameters and used for every frame in the clip/plugin instance.
-5. Use **Amount** to reduce the stored correction without re-analyzing.
-6. If you materially change an upstream control or want a different reference frame, press **Analyze Current Frame** again.
-7. **Reset Neutral** returns the stored correction to identity.
+## Build
 
-There is no fake Live/Lock selector and no exposed Temp/Tint storage controls.
+The repository includes `.github/workflows/build.yml`. Push the files with `.github` at the repository root. GitHub Actions builds a universal `arm64 + x86_64` macOS OFX and uploads `KeystoneOFX-macOS-universal.zip`.
 
-## UI
-
-Resolve receives collapsible OFX groups:
-
-- Auto Match
-- Scene Grade
-- Input / Filters
-- White Balance
-- Tone
-- Color
-- Split Tone
-- Look
-- Skin
-
-Every continuous numeric control is defined as a bounded OFX `Double` with display minimum, display maximum, increment and digit precision so the host presents it as a slider. Actual enumerations remain dropdowns; Analyze/Reset are push buttons.
-
-## Build without Xcode installed locally
-
-You do **not** need Xcode on your Mac. Push this repository to GitHub and GitHub Actions builds the universal macOS bundle on a `macos-15` runner.
-
-### Artifact build
-
-Any push to `main`, pull request, or manual **Run workflow** executes:
-
-1. Linux source/model tests.
-2. macOS universal `arm64 + x86_64` CMake build.
-3. Metal shader compilation with `xcrun metal` and `metallib`.
-4. Bundle resource validation.
-5. OFX export-symbol validation.
-6. Runtime dependency check to reject accidental Homebrew library links.
-7. Ad-hoc code signing.
-8. Packaging as `KeystoneOFX-macOS-universal.zip`.
-
-Download the ZIP from the `KeystoneOFX-macOS-universal` Actions artifact.
-
-Pushing a tag such as `v1.0.0` also attaches the same ZIP to a GitHub Release.
+Local validation includes:
+- existing Keystone model tests
+- Region Grade synthetic mask tests
+- OFX dynamic-loader lifecycle smoke test
+- source sanity checks
 
 ## Install
 
-Unzip the Actions artifact, then either copy `KeystoneOFX.ofx.bundle` to:
-
-`/Library/OFX/Plugins/`
-
-or run:
+Copy `KeystoneOFX.ofx.bundle` to `/Library/OFX/Plugins/`, remove quarantine if macOS applied it, then restart Resolve.
 
 ```bash
-bash scripts/install_macos.sh /path/to/KeystoneOFX.ofx.bundle
+sudo xattr -dr com.apple.quarantine /Library/OFX/Plugins/KeystoneOFX.ofx.bundle
+sudo codesign --verify --deep --strict /Library/OFX/Plugins/KeystoneOFX.ofx.bundle
 ```
 
-Restart DaVinci Resolve after installation.
+## Load-safety rule
 
-## Metal / CPU paths
-
-On Resolve/macOS, Keystone advertises OFX Metal rendering and uses Resolve's Metal command queue and buffer handles. The `.metallib` is bundled under `Contents/Resources`, following the working PresenceOFX packaging pattern. A CPU implementation using the same DCTL-derived math and the same Referent cube is retained as a fallback and for model tests.
-
-## Provenance
-
-`reference/Keystone-v4_5_11-ReferentOnly.dctl` is included as the source reference used for this port. `generated/KeystoneConstants.inc` and `generated/KeystoneMath.inc` are extracted from that approved DCTL so the CPU and Metal paths do not silently substitute a new grading model.
-
-See `VALIDATION.md` and `THIRD_PARTY_NOTICES.md` for current validation/provenance notes.
+Region Grade must not add a new library to Keystone's runtime dependency list. If a future detector needs a model/runtime, it should be added only after this dependency-free version is proven stable in Resolve.
 
 ## License
 
-GPL-3.0-only, matching the current Keystone DCTL source.
-
-## v1.3 Auto Match
-Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coherence checks. A fixed skin-line hue is not used as the detector. When a credible coherent skin cluster exists, its measured skin-line error may steer the Keystone white-balance solution, while the scene-neutral estimate remains a safety prior. Without sufficient skin support, Auto Match falls back to the Keystone neutral estimators.
-
-## v1.4 control layout
-- Input / Filters: Hoya ND, SpektraFilm UV Cut, SpektraFilm IR Cut
-- Auto Match: Analyze, Reset, Amount
-- White Balance: Temp, Tint
-- Tone: Exposure, Black Pt, Contrast, Shadows, Highlights, Roll, Curve
-- Color: Density, Pos Sat, Interlayer, Sat Split
-- Film / Finish: Hi Bleach, Lo Bleach, Bleach, Fade
-- Split Tone
-- Look
-- Skin
-## Scene Grade
-
-Scene Grade adds a one-frame semantic analysis pass to Keystone. Press **Analyze Scene** on a representative frame and Keystone builds a display-referred thumbnail, identifies broad scene regions, selects a subject, and stores a scene-aware correction in the OFX instance. The stored correction is applied before the normal manual White Balance and Tone controls.
-
-Controls:
-
-- **Analyze Scene** — analyzes the current frame and stores the result.
-- **Subject** — Auto, Sky, Water, Skin, Foliage, Terrain, Ground, Built, or Other. Auto chooses the primary usable subject.
-- **Separation** — scales the stored warm/cool separation move without changing the detected subject.
-- **Bias** — leans the fitted subject tone targets; Skin and Sky use measured tone targets, while other regions retain the color decision only.
-- **Reset Scene Grade** — returns the whole Scene Grade stage to exact identity.
-
-The semantic path uses the bundled ADE20K model through a pinned ncnn revision. If the model cannot load, Keystone falls back to a deterministic Lab/position heuristic and reports that in the Scene Grade status field instead of silently changing behavior. Person labels are narrowed with the same chromatic skin test before they are allowed to act as Skin.
-
-### Load-safe scene engine
-
-The inference runtime is **not linked into `KeystoneOFX.ofx`**. The main Resolve plugin keeps the same load-time dependency footprint as the working Keystone base. `KeystoneSceneEngine.dylib` lives in `Contents/Resources` and is opened only when **Analyze Scene** is pressed. If that sidecar, ncnn, or the model cannot be opened, Keystone itself still loads and Scene Grade falls back to its deterministic heuristic path. CI rejects any build where the main OFX gains a hard ncnn/scene-engine dependency.
-
-The scene color decision preserves the source implementation's region mapping, salience/protection rules, subject ranking, duplicate-move removal, and linear multiplicative-versus-additive temperature decision law. The final control landing is Keystone-native: the move is evaluated against Keystone's own AWG4/LogC4 pipeline rather than importing a second grading pipeline.
-
+GPL-3.0-only.

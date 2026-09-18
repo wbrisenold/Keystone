@@ -9,7 +9,6 @@ struct Params {
   float matchOffsetR=0.0f, matchOffsetG=0.0f, matchOffsetB=0.0f;
   int32_t ndFilter=0;
   int32_t uvFilter=0; float uvCutNm=410.0f; int32_t irFilter=0; float irCutNm=675.0f;
-  float sceneGainTemp=0.0f, sceneOffsetTemp=0.0f, sceneExposure=0.0f, sceneShadows=0.0f, sceneHighlights=0.0f;
   float wbTemp=0.0f, wbTint=0.0f;
   float exposure=0.0f, blackPoint=0.0f, contrast=1.0f, shadows=0.0f, highlights=0.0f, roll=0.0f;
   int32_t curvePreset=0;
@@ -19,6 +18,8 @@ struct Params {
   int32_t lookColor=0;
   float lookAmount=1.0f;
   int32_t creativeWhite=2;
+  int32_t regionEnable=0, regionTarget=0, regionShowMask=0;
+  float regionExposure=0.0f, regionContrast=1.0f, regionSaturation=1.0f, regionTemp=0.0f, regionAmount=1.0f, regionFeather=0.25f;
   int skinEnable=0, skinPreset=0, skinShowMask=0;
   float skinSaturate=0.2f, skinColour=0.0f, skinPop=0.0f, skinCenter=0.0f, skinRange=40.0f, skinBrightness=0.5f, skinBrightnessRange=1.0f, skinIntensity=100.0f;
 };

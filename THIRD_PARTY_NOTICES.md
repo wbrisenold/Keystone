@@ -16,12 +16,3 @@ Key components represented in the current Keystone math include:
 This repository does not bundle Contour or Genesis OFX binaries, their LUT export paths, stock D-LogE tables, halation, grain, overlays or watermark code.
 
 See the reference DCTL comments and the user's upstream project documentation for detailed attribution applicable to the math carried forward here.
-
-
-## Scene Grade semantic analysis
-
-The Scene Grade region-selection and scene-decision logic is adapted from the GPL-3.0 OneGrade project by Matt Grdinic. Keystone is already GPL-3.0-only, so the adapted source remains under compatible GPL terms.
-
-The bundled ADE20K PP-MobileSeg model is distributed under Apache-2.0 terms; a copy is included at `vendor/licenses/ADE20K-model-Apache-2.0.txt`.
-
-The optional inference runtime is ncnn, pinned in CMake to commit `5e66f094bf7c597b4569cc014a8be84104748678`; its BSD-3-Clause license is included at `vendor/licenses/ncnn-BSD-3-Clause.txt`.

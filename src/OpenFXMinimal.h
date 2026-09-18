@@ -110,13 +110,13 @@ constexpr OfxStatus kOfxStatReplyDefault=14;
 #define kOfxImageEffectSuite "OfxImageEffectSuite"
 #define kOfxParameterSuite "OfxParameterSuite"
 
+typedef struct OfxHost { OfxPropertySetHandle host; const void* (*fetchSuite)(OfxPropertySetHandle,const char*,int); } OfxHost;
 typedef struct OfxPlugin {
   const char* pluginApi; int apiVersion; const char* pluginIdentifier;
   unsigned int pluginVersionMajor,pluginVersionMinor;
-  void (*setHost)(void*);
+  void (*setHost)(OfxHost*);
   OfxStatus (*mainEntry)(const char*,const void*,OfxPropertySetHandle,OfxPropertySetHandle);
 } OfxPlugin;
-typedef struct OfxHost { OfxPropertySetHandle host; void* (*fetchSuite)(OfxPropertySetHandle,const char*,int); } OfxHost;
 
 struct OfxPropertySuiteV1 {
   OfxStatus (*propSetPointer)(OfxPropertySetHandle,const char*,int,void*);

@@ -1,0 +1,156 @@
+{
+  "name": "KeystoneOFX",
+  "version": "1.6.0",
+  "files": [
+    {
+      "file": ".github/workflows/build.yml",
+      "bytes": 1640,
+      "sha256": "0481d05c49d51a658047ad34dd6cef3fca3537b86f31c08ec6a46d9bce228b7d"
+    },
+    {
+      "file": ".gitignore",
+      "bytes": 61,
+      "sha256": "cb6ffa9fc2f069c5d1d12008a89beb49e79e83d92c5bdb0854f3df0e7faa85cf"
+    },
+    {
+      "file": "CMakeLists.txt",
+      "bytes": 912,
+      "sha256": "c3462e29f19e62c55de3e3b97a0cd3e5f2d183642ef1c5cc09e3955255df7e99"
+    },
+    {
+      "file": "LICENSE",
+      "bytes": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1350,
+      "sha256": "dd9420a6c209e8a59259208e6fc284a8e9b0d1eecc234ef9c1e8c96df8e1478d"
+    },
+    {
+      "file": "RELEASE_NOTES.md",
+      "bytes": 498,
+      "sha256": "f478aa179fed1479d0a6f7d4a68036738b7d6e453d2b8b04639f7becee27ef18"
+    },
+    {
+      "file": "THIRD_PARTY_NOTICES.md",
+      "bytes": 1206,
+      "sha256": "da3625ea6cc8d3d95008976213976291476d4057dec219bcabed6e6c705300e9"
+    },
+    {
+      "file": "VALIDATION.md",
+      "bytes": 303,
+      "sha256": "327e3190641d28ad510904b2cc17a63f657250e13f550a8be7dac53ca12884cc"
+    },
+    {
+      "file": "ci/source_sanity.py",
+      "bytes": 2512,
+      "sha256": "698330dca53421be10eb38ee3179a01b2246af0ba6d23578ba2389d9090acba8"
+    },
+    {
+      "file": "ci/validate_bundle_macos.sh",
+      "bytes": 891,
+      "sha256": "d6a4aa97a05a4d98837aac7f3c872ecc32ffd122f4be522308ebc9d5f8df07ad"
+    },
+    {
+      "file": "generated/KeystoneConstants.inc",
+      "bytes": 10959,
+      "sha256": "1ba25d41d255337c67f7ba4d87ca53a814749c4f384decf11ca2ef8b74a75db4"
+    },
+    {
+      "file": "generated/KeystoneMath.inc",
+      "bytes": 61124,
+      "sha256": "1346502fa71901578908714b4a0706fb09a61bd575e41421529e65e4d4fbcb85"
+    },
+    {
+      "file": "reference/Keystone-reference.dctl",
+      "bytes": 1498399,
+      "sha256": "3f5ae5983aea0b8c6709f2d7a39a0f0ee574190b45c56a8dd7a932cc3816d4d0"
+    },
+    {
+      "file": "resources/Keystone_Output_LogC4_to_Rec709.cube",
+      "bytes": 1401729,
+      "sha256": "9bd910e505f4f8fdfef67f97b85b7127f80528c4fda99e87ebb25eaa985c6d54"
+    },
+    {
+      "file": "scripts/build_macos.sh",
+      "bytes": 1770,
+      "sha256": "7ad99d9f4ee5471283c83d22d341e48462a7fe11691cad00de58c65ca191a937"
+    },
+    {
+      "file": "scripts/diagnose_macos.sh",
+      "bytes": 1011,
+      "sha256": "f82180a90399bfa4e794d8d8f1200814563b74c8e56295c2d27697e130a2271f"
+    },
+    {
+      "file": "scripts/install_macos.sh",
+      "bytes": 570,
+      "sha256": "8ae9f9c486f139cfd3f202d51aa387969dd23f0d66afd6d67985ed2201265bd0"
+    },
+    {
+      "file": "src/Info.plist.in",
+      "bytes": 601,
+      "sha256": "b57d83caf81515e8dc5c83f09218a9cc79c47b1980f041a5638989c8a363c27f"
+    },
+    {
+      "file": "src/KeystoneCPU.cpp",
+      "bytes": 578,
+      "sha256": "f91c1238b1e9d7df0ba159f6c973739a48dac7db2bcd23fc2bfd394380cb0868"
+    },
+    {
+      "file": "src/KeystoneCPU.h",
+      "bytes": 239,
+      "sha256": "bed014a5e9e315bac2fa5d2ddd932dfb52e9e9a334b615abb164fccf1b431d45"
+    },
+    {
+      "file": "src/KeystoneCoreCPU.h",
+      "bytes": 7371,
+      "sha256": "19a318dc66995f89d198a3c45a2b50235742a6defaf7e1cf0dded5c87fcb9541"
+    },
+    {
+      "file": "src/KeystoneOFX.cpp",
+      "bytes": 24000,
+      "sha256": "c4e472c70c78796b37e074cdcfa414ac935716bc78f2116e50d287600ee3a6df"
+    },
+    {
+      "file": "src/KeystoneParams.h",
+      "bytes": 1335,
+      "sha256": "2a39818e204349f1e9b88f9da4f08124ea3abc47208cbf68702cbac3abd543f9"
+    },
+    {
+      "file": "src/LutLoader.cpp",
+      "bytes": 1672,
+      "sha256": "6f11ad57755eee15188f6d48210ffaa941eab56a97f558981f8796f2710a0ef5"
+    },
+    {
+      "file": "src/LutLoader.h",
+      "bytes": 238,
+      "sha256": "8fb01792432207591c987bca26217d67f6e003fae214a50b2585a82cbde97199"
+    },
+    {
+      "file": "src/NeutralAnalyzer.cpp",
+      "bytes": 13481,
+      "sha256": "7b31cf4e36c479269acb3c8416b3c3c4ef580bacf2274e928435992b3c419d04"
+    },
+    {
+      "file": "src/NeutralAnalyzer.h",
+      "bytes": 175,
+      "sha256": "1e466fbcd3228c5de041983be98c90af706dd7f7a650981dedf59fb31ccb5aa1"
+    },
+    {
+      "file": "src/OpenFXMinimal.h",
+      "bytes": 8847,
+      "sha256": "d550da842971dd82432829c835062a3b54f4662bbdb8cc53f18fb276200e4f56"
+    },
+    {
+      "file": "tests/keystone_model_tests.cpp",
+      "bytes": 3311,
+      "sha256": "bd28c9e7215b4ac5382a01202b6ecdbceed46f9124afc6b3cc941af87f69f7f8"
+    },
+    {
+      "file": "tests/ofx_loader_smoke.cpp",
+      "bytes": 1331,
+      "sha256": "c0dfa354c7d704cc9a8836deee90d6b5e6ab97514a2b726863c57d5c7e6fde87"
+    }
+  ]
+}
