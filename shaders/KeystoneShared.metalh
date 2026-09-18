@@ -28,6 +28,7 @@ struct KeystoneMetalParams {
   float neutralGainR,neutralGainG,neutralGainB; float matchSlopeR,matchSlopeG,matchSlopeB,matchOffsetR,matchOffsetG,matchOffsetB;
   int ndFilter;
   int uvFilter; float uvCutNm; int irFilter; float irCutNm;
+  float sceneGainTemp,sceneOffsetTemp,sceneExposure,sceneShadows,sceneHighlights;
   float wbTemp,wbTint;
   float exposure,blackPoint,contrast,shadows,highlights,roll;
   int curvePreset;
@@ -45,6 +46,8 @@ inline float3 ksPreNeutral(float3 input,constant KeystoneMetalParams& p){
   float3 lin=logc4_decode(input);
   {float3 repair_xyz=awg4_to_xyz(lin);repair_xyz=input_gamut_heal_xyz(repair_xyz);lin=xyz_to_awg4(repair_xyz);}
   int nd=p.ndFilter;if(nd<0||nd>11)nd=0;if(nd!=0)lin=ks_apply_hoya_nd(lin,nd);if(p.uvFilter||p.irFilter)lin=ks_apply_spektrafilm_uv_ir(lin,p.uvFilter,clampf(p.uvCutNm,350.0f,500.0f),p.irFilter,clampf(p.irCutNm,600.0f,800.0f));
+  float sgt=clampf(p.sceneGainTemp,-1.0f,1.0f),sot=clampf(p.sceneOffsetTemp,-1.0f,1.0f);if(_fabs(sgt)>1e-7f){lin.x*=(1.0f+sgt*0.20f);lin.z*=(1.0f-sgt*0.20f);}if(_fabs(sot)>1e-7f){lin.x+=sot*0.10f;lin.z-=sot*0.10f;}
+  float sexp=clampf(p.sceneExposure,-3.0f,3.0f);if(_fabs(sexp)>1e-7f)lin*=_powf(2.0f,sexp);float ssh=clampf(p.sceneShadows,-1.0f,1.0f),shi=clampf(p.sceneHighlights,-1.0f,1.0f);if(_fabs(ssh)>1e-7f||_fabs(shi)>1e-7f)lin=primera_tone_luma(lin,1.0f,ssh,shi,0.0f);
   float wt=clampf(p.wbTemp,-100.0f,100.0f),wi=clampf(p.wbTint,-100.0f,100.0f);
   if(_fabs(wt)>1e-7f||_fabs(wi)>1e-7f)lin=ks_apply_opponent_wb_awg4(lin,wt,wi);
   float ex=clampf(p.exposure,-6.0f,6.0f);if(_fabs(ex)>1e-7f){float k=_powf(2.0f,ex);lin*=k;}

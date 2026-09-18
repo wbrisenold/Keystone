@@ -12,12 +12,20 @@ engine=root/'vendor/ColorGradr/colorgradr.ofx.bundle/Contents/MacOS/colorgradr.o
 if not engine.is_file(): fail('bundled ColorGradr engine missing')
 if engine.stat().st_size != 3759488: fail('unexpected ColorGradr engine size')
 
+
+model_bin=root/'resources/SceneModel/ade20k.bin'
+model_param=root/'resources/SceneModel/ade20k.param'
+if hashlib.sha256(model_bin.read_bytes()).hexdigest()!='908a6785debbca3502ce11a08462a00504f4718e86c326042fd6b076acf84790': fail('scene model bin changed')
+if hashlib.sha256(model_param.read_bytes()).hexdigest()!='ba8e532e6357899f7f1fd8deeaf75322ce3f063487602ae32338a415bde569da': fail('scene model param changed')
+for target in [root/'README.md',root/'src/SceneGrade.cpp',root/'src/SceneGrade.h',root/'src/KeystoneOFX.cpp']:
+    if ('magic'+' grade') in target.read_text().lower(): fail('retired upstream feature name found in '+str(target.relative_to(root)))
+
 text=(root/'src/KeystoneOFX.cpp').read_text()
 metal=(root/'shaders/KeystoneShared.metalh').read_text()
 for token in ['colorgradr_fix','resetNeutral','neutralGainR','kOfxActionInstanceChanged','kOfxParamTypeGroup','kOfxParamPropGroupOpen','colorgradr_bridge::delegate']:
     if token not in text and token not in (root/'src/OpenFXMinimal.h').read_text(): fail('missing '+token)
 # Every exposed continuous Keystone control must be defined by the slider helper.
-expected=['neutralAmount','wbTemp','wbTint','exposure','blackPoint','contrast','shadows','highlights','roll','density','posSat','interlayer','satSplit','hiBleach','loBleach','colorBleach','fade','splitAmount','splitShadowHue','splitHighlightHue','splitBalance','splitSubtractive','lookAmount','uvCutNm','irCutNm','skinSaturate','skinColour','skinPop','skinCenter','skinRange','skinBrightness','skinBrightnessRange','skinIntensity']
+expected=['sceneSeparation','sceneBias','neutralAmount','wbTemp','wbTint','exposure','blackPoint','contrast','shadows','highlights','roll','density','posSat','interlayer','satSplit','hiBleach','loBleach','colorBleach','fade','splitAmount','splitShadowHue','splitHighlightHue','splitBalance','splitSubtractive','lookAmount','uvCutNm','irCutNm','skinSaturate','skinColour','skinPop','skinCenter','skinRange','skinBrightness','skinBrightnessRange','skinIntensity']
 for p in expected:
     if f'defineSlider(ps,"{p}"' not in text: fail(f'{p} is not exposed as a slider')
 # Analyze once must store hidden persistent gains, not evaluate every render.

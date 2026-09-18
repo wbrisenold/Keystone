@@ -28,3 +28,11 @@ The included workflow is designed to verify what cannot be tested in this Linux 
 - Final release ZIP contents and original Referent LUT hash.
 
 Until that workflow runs successfully, macOS/Resolve runtime compatibility should be considered build-candidate status rather than claimed as tested in Resolve.
+
+
+## Scene Grade checks
+
+- Semantic model SHA-256 values are pinned in `ci/source_sanity.py` and the macOS packaging script.
+- The former upstream feature name is rejected from the Scene Grade source and README by source sanity.
+- Scene Grade has an exact-zero bypass in Keystone's processing path.
+- Model-unavailable behavior uses an explicit deterministic heuristic fallback rather than silently returning an empty result.

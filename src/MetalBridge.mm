@@ -11,6 +11,7 @@ static std::mutex gMutex; static MetalState gState;
 struct MetalParams {
   float neutralAmount; float neutralGainR,neutralGainG,neutralGainB; float matchSlopeR,matchSlopeG,matchSlopeB,matchOffsetR,matchOffsetG,matchOffsetB; int ndFilter;
   int uvFilter; float uvCutNm; int irFilter; float irCutNm;
+  float sceneGainTemp,sceneOffsetTemp,sceneExposure,sceneShadows,sceneHighlights;
   float wbTemp,wbTint; float exposure,blackPoint,contrast,shadows,highlights,roll; int curvePreset;
   float density,posSat,interlayer,satSplit; float splitAmount,splitShadowHue,splitHighlightHue,splitBalance,splitSubtractive;
   float hiBleach,loBleach,colorBleach,fade; int lookColor; float lookAmount; int creativeWhite; int skinEnable,skinPreset; float skinSaturate,skinColour,skinPop,skinCenter,skinRange,skinBrightness,skinBrightnessRange; int skinShowMask; float skinIntensity;
@@ -34,7 +35,7 @@ bool runMetal(void* cq,int w,int h,void* srcH,void* dstH,int ss,int ds,const Par
   id<MTLCommandQueue> q=(__bridge id<MTLCommandQueue>)cq;id<MTLBuffer> inB=(__bridge id<MTLBuffer>)srcH;id<MTLBuffer> outB=(__bridge id<MTLBuffer>)dstH;
   if(!q||!inB||!outB||w<=0||h<=0||ss<w*4||ds<w*4||(ss%4)||(ds%4)||!initMetal(q))return false;
   NSUInteger sb=(NSUInteger)ss*h*sizeof(float),db=(NSUInteger)ds*h*sizeof(float);if([inB length]<sb||[outB length]<db)return false;
-  MetalParams mp{p.neutralAmount,p.neutralGainR,p.neutralGainG,p.neutralGainB,p.matchSlopeR,p.matchSlopeG,p.matchSlopeB,p.matchOffsetR,p.matchOffsetG,p.matchOffsetB,p.ndFilter,p.uvFilter,p.uvCutNm,p.irFilter,p.irCutNm,p.wbTemp,p.wbTint,p.exposure,p.blackPoint,p.contrast,p.shadows,p.highlights,p.roll,p.curvePreset,p.density,p.posSat,p.interlayer,p.satSplit,p.splitAmount,p.splitShadowHue,p.splitHighlightHue,p.splitBalance,p.splitSubtractive,p.hiBleach,p.loBleach,p.colorBleach,p.fade,p.lookColor,p.lookAmount,p.creativeWhite,p.skinEnable,p.skinPreset,p.skinSaturate,p.skinColour,p.skinPop,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange,p.skinShowMask,p.skinIntensity,w,h,ss,ds};
+  MetalParams mp{p.neutralAmount,p.neutralGainR,p.neutralGainG,p.neutralGainB,p.matchSlopeR,p.matchSlopeG,p.matchSlopeB,p.matchOffsetR,p.matchOffsetG,p.matchOffsetB,p.ndFilter,p.uvFilter,p.uvCutNm,p.irFilter,p.irCutNm,p.sceneGainTemp,p.sceneOffsetTemp,p.sceneExposure,p.sceneShadows,p.sceneHighlights,p.wbTemp,p.wbTint,p.exposure,p.blackPoint,p.contrast,p.shadows,p.highlights,p.roll,p.curvePreset,p.density,p.posSat,p.interlayer,p.satSplit,p.splitAmount,p.splitShadowHue,p.splitHighlightHue,p.splitBalance,p.splitSubtractive,p.hiBleach,p.loBleach,p.colorBleach,p.fade,p.lookColor,p.lookAmount,p.creativeWhite,p.skinEnable,p.skinPreset,p.skinSaturate,p.skinColour,p.skinPop,p.skinCenter,p.skinRange,p.skinBrightness,p.skinBrightnessRange,p.skinShowMask,p.skinIntensity,w,h,ss,ds};
   id<MTLCommandBuffer> cb=[q commandBuffer];if(!cb)return false;id<MTLComputeCommandEncoder> enc=[cb computeCommandEncoder];if(!enc)return false;
   [enc setComputePipelineState:gState.pipeline];[enc setBuffer:inB offset:0 atIndex:0];[enc setBuffer:outB offset:0 atIndex:1];[enc setBytes:&mp length:sizeof(mp) atIndex:2];[enc setBuffer:gState.lut offset:0 atIndex:3];
   NSUInteger tw=gState.pipeline.threadExecutionWidth;if(tw<1)tw=1;NSUInteger avail=gState.pipeline.maxTotalThreadsPerThreadgroup/tw;NSUInteger th=avail<16?avail:16;if(th<1)th=1;

@@ -9,6 +9,7 @@ struct Params {
   float matchOffsetR=0.0f, matchOffsetG=0.0f, matchOffsetB=0.0f;
   int32_t ndFilter=0;
   int32_t uvFilter=0; float uvCutNm=410.0f; int32_t irFilter=0; float irCutNm=675.0f;
+  float sceneGainTemp=0.0f, sceneOffsetTemp=0.0f, sceneExposure=0.0f, sceneShadows=0.0f, sceneHighlights=0.0f;
   float wbTemp=0.0f, wbTint=0.0f;
   float exposure=0.0f, blackPoint=0.0f, contrast=1.0f, shadows=0.0f, highlights=0.0f, roll=0.0f;
   int32_t curvePreset=0;

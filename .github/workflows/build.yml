@@ -3,7 +3,7 @@ name: Build KeystoneOFX
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
     tags: [ 'v*' ]
   pull_request:
 
@@ -29,6 +29,8 @@ jobs:
             -c src/KeystoneOFX.cpp -o KeystoneOFX.o
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
             -c src/ColorGradrBridge.cpp -o ColorGradrBridge.o
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
+            -c src/SceneGrade.cpp -o SceneGrade.o
 
   macos-build:
     runs-on: macos-15

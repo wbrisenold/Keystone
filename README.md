@@ -15,7 +15,7 @@ That placement also fixes the saturation issue from the earlier DCTL: Sat Split,
 ## Input / output contract
 
 - **Input:** ARRI Wide Gamut 4 / LogC4
-- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact Bleach stage when enabled
+- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's Bleach stage when enabled
 - Do not place another LogC4-to-display conversion after KeystoneOFX unless you intentionally want a second transform.
 
 The bundled Referent cube SHA-256 is:
@@ -40,8 +40,10 @@ There is no fake Live/Lock selector and no exposed Temp/Tint storage controls.
 
 Resolve receives collapsible OFX groups:
 
-- Auto Neutral
-- Filter + White Balance
+- Auto Match
+- Scene Grade
+- Input / Filters
+- White Balance
 - Tone
 - Color
 - Split Tone
@@ -112,5 +114,19 @@ Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coher
 - Split Tone
 - Look
 - Skin
+## Scene Grade
 
+Scene Grade adds a one-frame semantic analysis pass to Keystone. Press **Analyze Scene** on a representative frame and Keystone builds a display-referred thumbnail, identifies broad scene regions, selects a subject, and stores a scene-aware correction in the OFX instance. The stored correction is applied before the normal manual White Balance and Tone controls.
+
+Controls:
+
+- **Analyze Scene** — analyzes the current frame and stores the result.
+- **Subject** — Auto, Sky, Water, Skin, Foliage, Terrain, Ground, Built, or Other. Auto chooses the primary usable subject.
+- **Separation** — scales the stored warm/cool separation move without changing the detected subject.
+- **Bias** — leans the fitted subject tone targets; Skin and Sky use measured tone targets, while other regions retain the color decision only.
+- **Reset Scene Grade** — returns the whole Scene Grade stage to exact identity.
+
+The semantic path uses the bundled ADE20K model through a pinned ncnn revision. If the model cannot load, Keystone falls back to a deterministic Lab/position heuristic and reports that in the Scene Grade status field instead of silently changing behavior. Person labels are narrowed with the same chromatic skin test before they are allowed to act as Skin.
+
+The scene color decision preserves the source implementation's region mapping, salience/protection rules, subject ranking, duplicate-move removal, and linear multiplicative-versus-additive temperature decision law. The final control landing is Keystone-native: the move is evaluated against Keystone's own AWG4/LogC4 pipeline rather than importing a second grading pipeline.
 

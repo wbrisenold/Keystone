@@ -43,3 +43,12 @@
 - Keeps Keystone instance storage separate from ColorGradr's OFX instance storage.
 - Adds **ColorGradr Only** diagnostic mode. When enabled, the plugin returns the native ColorGradr render before any Keystone processing.
 - ColorGradr license/activation controls remain hidden; the bundled v4-clean binary is the prior working no-license build.
+
+
+## Scene Grade integration
+
+- Added semantic Scene Grade analysis with a bundled ADE20K model.
+- Added Auto/named subject selection, Separation, Bias, status, and reset controls.
+- Added the protected-skin subject rule and region-aware gain-vs-offset temperature decision.
+- Scene color/tone offsets are stored in the OFX instance and applied before manual White Balance/Tone.
+- Added deterministic heuristic fallback when the model runtime or model files are unavailable.
