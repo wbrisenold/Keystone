@@ -8,7 +8,7 @@ The grade pipeline remains:
 
 `LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> ToneLab Bleach`
 
-The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered ColorGradr histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
+The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
 
 That placement also fixes the saturation issue from the earlier DCTL: Sat Split, Density, Pos Sat and Interlayer are included before neutral analysis and before the stored correction is applied, so increasing those controls does not simply restore the cast that was neutralized.
 
@@ -119,13 +119,3 @@ Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coher
 The creative Skin section now follows ToneLab's Skin Tones control surface instead of Keystone's previous Primera Sat/Dense pair. ToneLab's parameter labels, ranges, defaults and six preset names were recovered from the supplied ToneLab.ofx. Skin selection uses the recovered ToneLab HSL hue/lightness Gaussian family already present in Keystone.
 
 SpektraFilm UV/IR filtering is placed in Input / Filters, before WB/exposure. SpektraFilm is wavelength-resolved; Keystone is not. The OFX therefore uses the SpektraFilm erf cutoff shape/default edges projected onto a 610/550/450 nm RGB basis, with that limitation documented in source and UI.
-
-## Native ColorGradr match engine (v1.5)
-
-Auto Match now runs the bundled ColorGradr OFX itself. `Analyze Match` is ColorGradr's native
-`colorgradr_fix` parameter, and ColorGradr renders the image before Keystone's grading stages.
-Use **ColorGradr Only = On** to bypass every Keystone stage after ColorGradr and compare the
-result directly with standalone ColorGradr.
-
-The implementation intentionally does not translate ColorGradr into RGB gains or reproduce
-its internal hue optimizer. See `COLORGRADR_NATIVE_ENGINE_AUDIT.md` for the integration boundary.
