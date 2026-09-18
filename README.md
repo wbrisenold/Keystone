@@ -6,7 +6,7 @@ KeystoneOFX is the OFX/Metal version of the current Keystone AWG4/LogC4 grading 
 
 The grade pipeline remains:
 
-`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> ToneLab Bleach`
+`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> Bleach`
 
 The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
 
@@ -15,7 +15,7 @@ That placement also fixes the saturation issue from the earlier DCTL: Sat Split,
 ## Input / output contract
 
 - **Input:** ARRI Wide Gamut 4 / LogC4
-- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact recovered ToneLab Bleach when enabled
+- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact Bleach stage when enabled
 - Do not place another LogC4-to-display conversion after KeystoneOFX unless you intentionally want a second transform.
 
 The bundled Referent cube SHA-256 is:
@@ -114,8 +114,3 @@ Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coher
 - Skin
 
 
-## v1.4 ToneLab Skin + SpektraFilm UV/IR
-
-The creative Skin section now follows ToneLab's Skin Tones control surface instead of Keystone's previous Primera Sat/Dense pair. ToneLab's parameter labels, ranges, defaults and six preset names were recovered from the supplied ToneLab.ofx. Skin selection uses the recovered ToneLab HSL hue/lightness Gaussian family already present in Keystone.
-
-SpektraFilm UV/IR filtering is placed in Input / Filters, before WB/exposure. SpektraFilm is wavelength-resolved; Keystone is not. The OFX therefore uses the SpektraFilm erf cutoff shape/default edges projected onto a 610/550/450 nm RGB basis, with that limitation documented in source and UI.
