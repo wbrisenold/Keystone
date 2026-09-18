@@ -11,40 +11,52 @@ permissions:
   contents: write
 
 jobs:
-  linux-tests:
+  linux-model-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Source sanity
         run: python3 ci/source_sanity.py
-      - name: Model tests
+      - name: Build and run model tests
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror=return-type -Isrc -Igenerated \
             tests/keystone_model_tests.cpp src/KeystoneCPU.cpp src/NeutralAnalyzer.cpp src/LutLoader.cpp \
             -o keystone_model_tests
           ./keystone_model_tests
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror=return-type -Isrc -Igenerated \
+            tests/region_grade_tests.cpp src/KeystoneCPU.cpp src/LutLoader.cpp \
+            -o region_grade_tests
+          ./region_grade_tests
       - name: Compile OFX host source
-        run: g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated -c src/KeystoneOFX.cpp -o KeystoneOFX.o
-      - name: OFX lifecycle smoke test
         run: |
-          cmake -S . -B build-smoke -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-smoke --parallel 2
-          g++ -std=c++17 tests/ofx_loader_smoke.cpp -ldl -o ofx_loader_smoke
-          ./ofx_loader_smoke build-smoke/KeystoneOFX.ofx
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
+            -c src/KeystoneOFX.cpp -o KeystoneOFX.o
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
+            -c src/ColorGradrBridge.cpp -o ColorGradrBridge.o
 
   macos-build:
     runs-on: macos-15
-    needs: linux-tests
+    needs: linux-model-tests
     steps:
       - uses: actions/checkout@v4
-      - name: Build universal OFX
+      - name: Toolchain preflight
+        run: |
+          set -euxo pipefail
+          xcodebuild -version
+          clang++ --version
+          xcrun --find metal
+          xcrun --find metallib
+          cmake --version
+      - name: Build universal Metal OFX
         run: bash scripts/build_macos.sh
+      - name: Validate packaged bundle
+        run: bash ci/validate_bundle_macos.sh
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: KeystoneOFX-macOS-universal
           path: dist/KeystoneOFX-macOS-universal.zip
-      - name: Publish release
+      - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:

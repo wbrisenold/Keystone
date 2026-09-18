@@ -1,12 +1,147 @@
-# KeystoneOFX — Region Grade build
+# KeystoneOFX
 
-This branch starts from the last known-good pre-port Keystone v1.6.0 LoadSafe source. The original load-safe architecture is preserved: one Keystone OFX binary, CPU rendering, no nested plug-ins, no inference runtime, no sidecar, and no new load-time dependency.
+KeystoneOFX is the OFX/Metal version of the current Keystone AWG4/LogC4 grading pipeline. It keeps the original user-supplied `Referent_LogC4_to_Rec709.cube` as the final output transform and adds a **real one-frame Auto Neutral lock** that a DCTL cannot persist.
 
-## Region Grade
+## What changed from the DCTL
 
-Region Grade adds local controls without replacing Keystone's grading pipeline.
+The grade pipeline remains:
 
-Regions:
+`LogC4 decode -> input gamut repair -> Hoya ND -> WB -> exposure/tone -> Sat Split -> Density -> Pos Sat -> Genesis Interlayer -> locked Neutral -> Split Tone -> bleach/fade -> look -> skin -> Creative White -> safety -> LogC4 -> original Referent -> ToneLab Bleach`
+
+The important Auto Neutral difference is state. Pressing **Analyze Current Frame** fetches the frame under the playhead once, analyzes the signal after Keystone's pre-neutral color stages with the recovered ColorGradr histogram/level analysis front-end, and stores three hidden persistent RGB gains in the OFX instance. Render does not analyze later frames. Those stored gains remain fixed until you analyze again or press **Reset Neutral**.
+
+That placement also fixes the saturation issue from the earlier DCTL: Sat Split, Density, Pos Sat and Interlayer are included before neutral analysis and before the stored correction is applied, so increasing those controls does not simply restore the cast that was neutralized.
+
+## Input / output contract
+
+- **Input:** ARRI Wide Gamut 4 / LogC4
+- **Output:** original Referent LogC4 -> Rec.709 / BT.1886, followed by Keystone's exact recovered ToneLab Bleach when enabled
+- Do not place another LogC4-to-display conversion after KeystoneOFX unless you intentionally want a second transform.
+
+The bundled Referent cube SHA-256 is:
+
+`19b2feb5ed8cb767d980e9f9b351b6e1823a3990974277fdb4a46d1f709d251c`
+
+The build checks this hash before packaging.
+
+## Auto Neutral workflow
+
+1. Put the playhead on a representative frame for the shot.
+2. Set the Keystone controls that occur before Neutral first: ND, manual WB, tone, curve, Sat Split, Density, Pos Sat and Interlayer.
+3. Open **Auto Neutral** and press **Analyze Current Frame**.
+4. The calculated correction is stored in hidden persistent OFX parameters and used for every frame in the clip/plugin instance.
+5. Use **Amount** to reduce the stored correction without re-analyzing.
+6. If you materially change an upstream control or want a different reference frame, press **Analyze Current Frame** again.
+7. **Reset Neutral** returns the stored correction to identity.
+
+There is no fake Live/Lock selector and no exposed Temp/Tint storage controls.
+
+## UI
+
+Resolve receives collapsible OFX groups:
+
+- Auto Neutral
+- Filter + White Balance
+- Tone
+- Color
+- Region Grade
+- Split Tone
+- Look
+- Skin
+
+Every continuous numeric control is defined as a bounded OFX `Double` with display minimum, display maximum, increment and digit precision so the host presents it as a slider. Actual enumerations remain dropdowns; Analyze/Reset are push buttons.
+
+## Build without Xcode installed locally
+
+You do **not** need Xcode on your Mac. Push this repository to GitHub and GitHub Actions builds the universal macOS bundle on a `macos-15` runner.
+
+### Artifact build
+
+Any push to `main`, pull request, or manual **Run workflow** executes:
+
+1. Linux source/model tests.
+2. macOS universal `arm64 + x86_64` CMake build.
+3. Metal shader compilation with `xcrun metal` and `metallib`.
+4. Bundle resource validation.
+5. OFX export-symbol validation.
+6. Runtime dependency check to reject accidental Homebrew library links.
+7. Ad-hoc code signing.
+8. Packaging as `KeystoneOFX-macOS-universal.zip`.
+
+Download the ZIP from the `KeystoneOFX-macOS-universal` Actions artifact.
+
+Pushing a tag such as `v1.0.0` also attaches the same ZIP to a GitHub Release.
+
+## Install
+
+Unzip the Actions artifact, then either copy `KeystoneOFX.ofx.bundle` to:
+
+`/Library/OFX/Plugins/`
+
+or run:
+
+```bash
+bash scripts/install_macos.sh /path/to/KeystoneOFX.ofx.bundle
+```
+
+Restart DaVinci Resolve after installation.
+
+## Metal / CPU paths
+
+On Resolve/macOS, Keystone advertises OFX Metal rendering and uses Resolve's Metal command queue and buffer handles. The `.metallib` is bundled under `Contents/Resources`, following the working PresenceOFX packaging pattern. A CPU implementation using the same DCTL-derived math and the same Referent cube is retained as a fallback and for model tests.
+
+## Provenance
+
+`reference/Keystone-v4_5_11-ReferentOnly.dctl` is included as the source reference used for this port. `generated/KeystoneConstants.inc` and `generated/KeystoneMath.inc` are extracted from that approved DCTL so the CPU and Metal paths do not silently substitute a new grading model.
+
+See `VALIDATION.md` and `THIRD_PARTY_NOTICES.md` for current validation/provenance notes.
+
+## License
+
+GPL-3.0-only, matching the current Keystone DCTL source.
+
+## v1.3 Auto Match
+Auto Match now uses an adaptive Y'CbCr skin candidate cluster with spatial-coherence checks. A fixed skin-line hue is not used as the detector. When a credible coherent skin cluster exists, its measured skin-line error may steer the Keystone white-balance solution, while the scene-neutral estimate remains a safety prior. Without sufficient skin support, Auto Match falls back to the Keystone neutral estimators.
+
+## v1.4 control layout
+- Input / Filters: Hoya ND, SpektraFilm UV Cut, SpektraFilm IR Cut
+- Auto Match: Analyze, Reset, Amount
+- White Balance: Temp, Tint
+- Tone: Exposure, Black Pt, Contrast, Shadows, Highlights, Roll, Curve
+- Color: Density, Pos Sat, Interlayer, Sat Split
+- Film / Finish: Hi Bleach, Lo Bleach, Bleach, Fade
+- Split Tone
+- Look
+- Skin
+
+
+## v1.4 ToneLab Skin + SpektraFilm UV/IR
+
+The creative Skin section now follows ToneLab's Skin Tones control surface instead of Keystone's previous Primera Sat/Dense pair. ToneLab's parameter labels, ranges, defaults and six preset names were recovered from the supplied ToneLab.ofx. Skin selection uses the recovered ToneLab HSL hue/lightness Gaussian family already present in Keystone.
+
+SpektraFilm UV/IR filtering is placed in Input / Filters, before WB/exposure. SpektraFilm is wavelength-resolved; Keystone is not. The OFX therefore uses the SpektraFilm erf cutoff shape/default edges projected onto a 610/550/450 nm RGB basis, with that limitation documented in source and UI.
+
+## Native ColorGradr match engine (v1.5)
+
+Auto Match now runs the bundled ColorGradr OFX itself. `Analyze Match` is ColorGradr's native
+`colorgradr_fix` parameter, and ColorGradr renders the image before Keystone's grading stages.
+Use **ColorGradr Only = On** to bypass every Keystone stage after ColorGradr and compare the
+result directly with standalone ColorGradr.
+
+The implementation intentionally does not translate ColorGradr into RGB gains or reproduce
+its internal hue optimizer. See `COLORGRADR_NATIVE_ENGINE_AUDIT.md` for the integration boundary.
+
+## Region Grade (selective local controls)
+
+This build starts from the verified pre-port Keystone repository state at commit
+`18ca0ee641997b3aabf709feebff0523d671cfda`. The two commits between the initial v1.5 commit
+and this point change only `README.md`; all plugin source, build files, Metal code, tests, and
+resources are identical. The next commit (`1b2844bd8937d39e39d43568b94c52e6e6b27301`) is the
+first commit that changes the plugin for the later scene-port work.
+
+Region Grade is Keystone-native and does not import that later grading/scene system. It adds a
+soft mask and local grade for:
+
 - Subject
 - Background
 - Sky
@@ -16,59 +151,12 @@ Regions:
 - Terrain
 - Built Environment
 
-Controls:
-- Exposure
-- Contrast
-- Saturation
-- Temperature
-- Amount
-- Feather
-- Show Mask
+Controls are **Exposure, Contrast, Saturation, Temperature, Amount, Feather, and Show Mask**.
+The local grade runs in the existing Keystone CPU post-process after the stored neutral stage
+and before split tone / finish / look / skin. No new dynamic library, model, sidecar, neural
+runtime, or load-time dependency is added.
 
-The local grade is applied in AWG4 scene-linear after Auto Match and the existing global tone/color preparation, before Keystone's split-tone/look/finish stages.
-
-### How the masks work
-
-This build intentionally does not add a neural-network runtime. Region masks are generated inside Keystone from image math already available to the plugin:
-
-- Subject combines Keystone skin evidence with a soft spatial/body expansion around detected skin.
-- Background is the inverse of the subject mask.
-- Sky uses upper-frame position, blue/cyan chroma, brightness, and a bright-neutral cloud allowance.
-- Foliage / Trees uses green chroma evidence.
-- Water uses cyan/blue chroma separated from likely sky by frame position.
-- Terrain uses brown/earth chroma and lower-frame evidence.
-- Ground uses lower-frame evidence while excluding stronger foliage, water, and subject evidence.
-- Built Environment is the remaining low-chroma/background structure after stronger semantic-style regions are removed.
-
-These are heuristic masks, not object-recognition AI. **Show Mask** is included so the selection can be judged before grading.
-
-## Auto Match
-
-Press **Analyze Match** on a representative frame. Keystone analyzes that frame once and stores the correction in the effect instance. **Reset Neutral** clears it.
-
-## Build
-
-The repository includes `.github/workflows/build.yml`. Push the files with `.github` at the repository root. GitHub Actions builds a universal `arm64 + x86_64` macOS OFX and uploads `KeystoneOFX-macOS-universal.zip`.
-
-Local validation includes:
-- existing Keystone model tests
-- Region Grade synthetic mask tests
-- OFX dynamic-loader lifecycle smoke test
-- source sanity checks
-
-## Install
-
-Copy `KeystoneOFX.ofx.bundle` to `/Library/OFX/Plugins/`, remove quarantine if macOS applied it, then restart Resolve.
-
-```bash
-sudo xattr -dr com.apple.quarantine /Library/OFX/Plugins/KeystoneOFX.ofx.bundle
-sudo codesign --verify --deep --strict /Library/OFX/Plugins/KeystoneOFX.ofx.bundle
-```
-
-## Load-safety rule
-
-Region Grade must not add a new library to Keystone's runtime dependency list. If a future detector needs a model/runtime, it should be added only after this dependency-free version is proven stable in Resolve.
-
-## License
-
-GPL-3.0-only.
+The first detector is deliberately lightweight: Subject uses Keystone's existing skin evidence
+plus a soft body/spatial expansion; other regions use hue/chroma, luminance, position, and
+mutual exclusion. `Show Mask` should be used to inspect the selection before making the local
+move. These are heuristic masks, not semantic-AI segmentation.

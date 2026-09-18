@@ -4,8 +4,8 @@
   <key>CFBundleDevelopmentRegion</key><string>English</string>
   <key>CFBundleExecutable</key><string>KeystoneOFX.ofx</string>
   <key>CFBundleIdentifier</key><string>com.luma.keystoneofx</string>
-  <key>CFBundleName</key><string>KeystoneOFX</string>
+  <key>CFBundleName</key><string>Keystone v1.3</string>
   <key>CFBundlePackageType</key><string>BNDL</string>
-  <key>CFBundleShortVersionString</key><string>1.6.0</string>
-  <key>CFBundleVersion</key><string>160</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleVersion</key><string>1</string>
 </dict></plist>

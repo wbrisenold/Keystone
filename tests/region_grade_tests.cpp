@@ -8,7 +8,7 @@ using namespace keystone;
 using namespace keystone_cpu;
 
 static float3 logFrom709(float r,float g,float b){
-  float3 awg=ks_ks_skin_rec709_to_awg4(make_float3(r,g,b));
+  float3 awg=ks_tl_rec709_to_awg4(make_float3(r,g,b));
   return logc4_encode(awg);
 }
 static float avgZone(const std::vector<float>& a,int w,int h,int x0,int y0,int x1,int y1){
@@ -26,13 +26,26 @@ int main(){
   std::vector<LutEntry> lut(35937); // show-mask path bypasses output LUT
   Params p;p.regionEnable=1;p.regionShowMask=1;p.regionTarget=0;p.regionFeather=.2f;
   processRGBA(img.data(),out.data(),W,H,W*4,W*4,p,lut);
-  float subjCenter=avgZone(out,W,H,48,25,72,55), subjEdge=avgZone(out,W,H,0,15,20,45);
+  float subjCenter=avgZone(out,W,H,48,25,72,55),subjEdge=avgZone(out,W,H,0,15,20,45);
   assert(subjCenter>subjEdge+0.15f);
   p.regionTarget=3;processRGBA(img.data(),out.data(),W,H,W*4,W*4,p,lut);
-  float foliageLeft=avgZone(out,W,H,0,10,25,45), foliageCenter=avgZone(out,W,H,50,28,70,52);
+  float foliageLeft=avgZone(out,W,H,0,10,25,45),foliageCenter=avgZone(out,W,H,50,28,70,52);
   assert(foliageLeft>foliageCenter+0.10f);
   p.regionTarget=2;processRGBA(img.data(),out.data(),W,H,W*4,W*4,p,lut);
   float skyTop=avgZone(out,W,H,20,60,100,78),skyBottom=avgZone(out,W,H,20,0,100,25);
   assert(skyTop>skyBottom+0.15f);
+  p.regionTarget=1;processRGBA(img.data(),out.data(),W,H,W*4,W*4,p,lut);
+  float bgEdge=avgZone(out,W,H,0,15,20,45),bgCenter=avgZone(out,W,H,48,25,72,55);
+  assert(bgEdge>bgCenter+0.15f);
+
+  // Local grade math: exposure must move a fully selected pixel and leave a zero-mask pixel alone.
+  Params q;q.regionEnable=1;q.regionExposure=1.0f;q.regionAmount=1.0f;
+  float3 base=make_float3(0.18f,0.16f,0.14f);
+  float3 bright=applyRegionGrade(base,q,1.0f);
+  float3 untouched=applyRegionGrade(base,q,0.0f);
+  assert(bright.x>base.x*1.9f && bright.y>base.y*1.9f && bright.z>base.z*1.9f);
+  assert(std::fabs(untouched.x-base.x)<1e-7f && std::fabs(untouched.y-base.y)<1e-7f && std::fabs(untouched.z-base.z)<1e-7f);
+  q.regionExposure=-1.0f;float3 dark=applyRegionGrade(base,q,1.0f);
+  assert(dark.x<base.x*0.55f && dark.y<base.y*0.55f && dark.z<base.z*0.55f);
   std::cout<<"region_grade_tests: OK\n";
 }

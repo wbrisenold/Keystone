@@ -6,7 +6,7 @@
 
 namespace keystone {
 namespace {
-struct RegionContext { float cx=0.5f, cy=0.62f, sx=0.23f, sy=0.46f; bool subject=false; };
+struct RegionContext { float cx=0.5f, cy=0.46f, sx=0.23f, sy=0.46f; bool subject=false; };
 
 static inline float smooth01(float a,float b,float x){
   if(a==b)return x>=b?1.0f:0.0f;
@@ -22,7 +22,7 @@ static inline keystone_cpu::float3 detectionLinear(keystone_cpu::float3 input){
 }
 static inline float skinEvidence(keystone_cpu::float3 lin){
   using namespace keystone_cpu;
-  return clampf(ks_keystone_skin_mask_awg4(lin,0.0f,46.0f,0.50f,1.35f),0.0f,1.0f);
+  return clampf(ks_tonelab_skin_mask_awg4(lin,0.0f,46.0f,0.50f,1.35f),0.0f,1.0f);
 }
 static RegionContext analyzeContext(const float* src,int w,int h,int ss){
   RegionContext c; double sw=0,sx=0,sy=0,sxx=0,syy=0;
@@ -30,12 +30,12 @@ static RegionContext analyzeContext(const float* src,int w,int h,int ss){
   for(int y=0;y<h;y+=step){const float* row=src+y*ss;float v=(y+0.5f)/(float)h;
     for(int x=0;x<w;x+=step){const float* px=row+x*4;auto lin=detectionLinear({px[0],px[1],px[2]});float m=skinEvidence(lin);if(m<0.08f)continue;float u=(x+0.5f)/(float)w;double q=m*m;sw+=q;sx+=q*u;sy+=q*v;sxx+=q*u*u;syy+=q*v*v;}}
   if(sw>3.0){
-    c.subject=true;c.cx=(float)(sx/sw);c.cy=(float)(sy/sw);
-    float vx=std::max(0.0004f,(float)(sxx/sw-c.cx*c.cx));float vy=std::max(0.0004f,(float)(syy/sw-c.cy*c.cy));
+    c.subject=true;c.cx=(float)(sx/sw);float skinCy=(float)(sy/sw);
+    float vx=std::max(0.0004f,(float)(sxx/sw-c.cx*c.cx));float vy=std::max(0.0004f,(float)(syy/sw-skinCy*skinCy));
     c.sx=std::max(0.18f,std::min(0.34f,0.12f+3.0f*std::sqrt(vx)));
     c.sy=std::max(0.38f,std::min(0.62f,0.30f+4.0f*std::sqrt(vy)));
-    // Skin is normally above the body center. Extend the semantic subject downward in OFX coordinates.
-    c.cy=std::max(0.30f,std::min(0.78f,c.cy-0.16f));
+    // Skin typically sits above the body centre in OFX bottom-up coordinates.
+    c.cy=std::max(0.22f,std::min(0.70f,skinCy-0.16f));
   }
   return c;
 }
@@ -44,12 +44,12 @@ static float subjectMask(keystone_cpu::float3 lin,float u,float v,const RegionCo
   float dx=(u-c.cx)/std::max(c.sx,0.05f),dy=(v-c.cy)/std::max(c.sy,0.08f);
   float d2=dx*dx+dy*dy;
   float edge=1.0f-smooth01(std::max(0.35f,0.85f-feather*0.35f),1.35f+feather*0.75f,std::sqrt(d2));
-  if(!c.subject)edge*=0.45f;
+  if(!c.subject)edge*=0.35f;
   return std::max(skin,edge);
 }
 static float regionMask(keystone_cpu::float3 input,float u,float v,const RegionContext& c,const Params& p){
   using namespace keystone_cpu;
-  float3 lin=detectionLinear(input);float3 rgb=ks_awg4_to_ks_skin_rec709(lin);float3 hsv=ks_rgb_to_hsv(rgb);
+  float3 lin=detectionLinear(input);float3 rgb=ks_awg4_to_tl_rec709(lin);float3 hsv=ks_rgb_to_hsv(rgb);
   float h=hsv.x,s=clampf(hsv.y,0.0f,1.0f),val=clampf(hsv.z,0.0f,1.2f),f=clampf(p.regionFeather,0.0f,1.0f);
   float subj=subjectMask(lin,u,v,c,f);
   float blue=hueBand(h,0.58f,0.16f)*smooth01(0.05f,0.28f,s);
@@ -76,23 +76,22 @@ static float regionMask(keystone_cpu::float3 input,float u,float v,const RegionC
     case 7:m=built;break;
     default:m=0.0f;break;
   }
-  // Keep semantic masks from leaking strongly onto the selected person.
   if(p.regionTarget>=2)m*=1.0f-0.80f*subj;
-  float lo=0.06f+0.12f*f,hi=0.72f-0.18f*f; if(hi<=lo)hi=lo+0.05f;
+  float lo=0.06f+0.12f*f,hi=0.72f-0.18f*f;if(hi<=lo)hi=lo+0.05f;
   return smooth01(lo,hi,clampf(m,0.0f,1.0f));
 }
 }
 
 void processRGBA(const float* src,float* dst,int w,int h,int ss,int ds,const Params& p,const std::vector<LutEntry>& lut){
   if(!src||!dst||w<=0||h<=0||std::abs(ss)<w*4||std::abs(ds)<w*4||lut.size()!=35937)return;
-  RegionContext ctx; if(p.regionEnable)ctx=analyzeContext(src,w,h,ss);
+  RegionContext ctx;if(p.regionEnable)ctx=analyzeContext(src,w,h,ss);
   for(int y=0;y<h;y++){
-    const float* srow=src+y*ss; float* drow=dst+y*ds; float v=(y+0.5f)/(float)h;
+    const float* srow=src+y*ss;float* drow=dst+y*ds;float v=(y+0.5f)/(float)h;
     for(int x=0;x<w;x++){
-      const float* px=srow+x*4; float* q=drow+x*4;float u=(x+0.5f)/(float)w;
+      const float* px=srow+x*4;float* q=drow+x*4;float u=(x+0.5f)/(float)w;
       float m=p.regionEnable?regionMask({px[0],px[1],px[2]},u,v,ctx,p):0.0f;
       if(p.regionEnable&&p.regionShowMask){q[0]=q[1]=q[2]=m;q[3]=px[3];continue;}
-      auto o=keystone_cpu::processPixel({px[0],px[1],px[2]},p,lut.data(),m); q[0]=o.x;q[1]=o.y;q[2]=o.z;q[3]=px[3];
+      auto o=keystone_cpu::processPixel({px[0],px[1],px[2]},p,lut.data(),m);q[0]=o.x;q[1]=o.y;q[2]=o.z;q[3]=px[3];
     }
   }
 }
