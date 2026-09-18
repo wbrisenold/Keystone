@@ -1,3 +1,15 @@
+# Keystone release notes
+
+## v1.6.1 load-safe Scene Grade
+
+- Moved semantic inference out of the main Resolve OFX binary.
+- Added `KeystoneSceneEngine.dylib`, loaded only when **Analyze Scene** is pressed.
+- The main plugin no longer links ncnn, so a scene-runtime/model problem cannot prevent Keystone from loading.
+- Moved universal macOS architecture settings before sidecar/ncnn target creation.
+- Added binary validation that both the OFX and sidecar contain arm64 + x86_64.
+- Added validation that the main OFX has no hard dependency on ncnn or the sidecar.
+- Restored an OFX `dlopen`/export/host-handshake smoke test on Linux.
+
 # Keystone v1.1
 
 - Auto Match now stores and applies the recovered ColorGradr AdjustLevel affine match directly instead of converting the analysis into Keystone RGB neutral gains.

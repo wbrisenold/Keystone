@@ -20,6 +20,16 @@ if hashlib.sha256(model_param.read_bytes()).hexdigest()!='ba8e532e6357899f7f1fd8
 for target in [root/'README.md',root/'src/SceneGrade.cpp',root/'src/SceneGrade.h',root/'src/KeystoneOFX.cpp']:
     if ('magic'+' grade') in target.read_text().lower(): fail('retired upstream feature name found in '+str(target.relative_to(root)))
 
+# Resolve load-safety: the main OFX must not compile or link the semantic inference runtime.
+scene=(root/'src/SceneGrade.cpp').read_text()
+cmake=(root/'CMakeLists.txt').read_text()
+if '#include <net.h>' in scene or 'ncnn::' in scene: fail('ncnn leaked into main SceneGrade translation unit')
+if 'target_link_libraries(KeystoneOFX PRIVATE ncnn)' in cmake: fail('main OFX has a hard ncnn dependency')
+if 'KeystoneSceneEngine.dylib' not in scene or 'dlopen' not in scene: fail('scene sidecar is not lazy-loaded')
+if 'KeystoneSceneSegment' not in (root/'src/SceneEngine.cpp').read_text(): fail('scene sidecar C ABI missing')
+for target in [root/'src/SceneEngine.cpp',root/'CMakeLists.txt']:
+    if ('magic'+' grade') in target.read_text().lower(): fail('retired upstream feature name found in '+str(target.relative_to(root)))
+
 text=(root/'src/KeystoneOFX.cpp').read_text()
 metal=(root/'shaders/KeystoneShared.metalh').read_text()
 for token in ['colorgradr_fix','resetNeutral','neutralGainR','kOfxActionInstanceChanged','kOfxParamTypeGroup','kOfxParamPropGroupOpen','colorgradr_bridge::delegate']:

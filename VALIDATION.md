@@ -36,3 +36,13 @@ Until that workflow runs successfully, macOS/Resolve runtime compatibility shoul
 - The former upstream feature name is rejected from the Scene Grade source and README by source sanity.
 - Scene Grade has an exact-zero bypass in Keystone's processing path.
 - Model-unavailable behavior uses an explicit deterministic heuristic fallback rather than silently returning an empty result.
+
+## Resolve load-safety checks
+
+- The main `KeystoneOFX` target does not link ncnn.
+- `src/SceneGrade.cpp` contains no direct ncnn include or ncnn symbols.
+- Semantic inference is isolated in `KeystoneSceneEngine.dylib` and reached through a C ABI with lazy `dlopen`.
+- Linux CMake build plus `dlopen`/OFX export/host-suite smoke test passes without the sidecar.
+- macOS packaging rejects a main OFX that links `KeystoneSceneEngine` or ncnn.
+- macOS packaging requires arm64 + x86_64 for both the main OFX and scene sidecar.
+- macOS packaging verifies `_KeystoneSceneSegment` is exported by the sidecar.

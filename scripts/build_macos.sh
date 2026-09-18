@@ -31,6 +31,14 @@ PLIST="$BUNDLE/Contents/Info.plist"; test -f "$PLIST"; test "$(/usr/libexec/Plis
 ARCHS="$(lipo -archs "$BIN")"; case " $ARCHS " in *" arm64 "*) ;; *) echo 'Missing arm64' >&2; exit 1;; esac; case " $ARCHS " in *" x86_64 "*) ;; *) echo 'Missing x86_64' >&2; exit 1;; esac
 SYMS="$(nm -gU "$BIN")"; printf '%s\n' "$SYMS" | grep -q '_OfxGetNumberOfPlugins'; printf '%s\n' "$SYMS" | grep -q '_OfxGetPlugin'; printf '%s\n' "$SYMS" | grep -q '_OfxSetHost'
 if otool -L "$BIN" | grep -E '/opt/homebrew|/usr/local/opt'; then echo 'Unexpected Homebrew runtime dependency' >&2; exit 1; fi
+# LOAD-SAFE CONTRACT: the main Resolve plugin must never have a hard dependency on the optional
+# inference runtime. Scene analysis is a sidecar opened only after Analyze Scene is pressed.
+if otool -L "$BIN" | grep -Ei 'KeystoneSceneEngine|ncnn'; then echo 'Main OFX unexpectedly links scene inference runtime' >&2; exit 1; fi
+SCENE="$BUNDLE/Contents/Resources/KeystoneSceneEngine.dylib"; test -f "$SCENE"
+SARCHS="$(lipo -archs "$SCENE")"; case " $SARCHS " in *" arm64 "*) ;; *) echo 'Scene engine missing arm64' >&2; exit 1;; esac; case " $SARCHS " in *" x86_64 "*) ;; *) echo 'Scene engine missing x86_64' >&2; exit 1;; esac
+nm -gU "$SCENE" | grep -q '_KeystoneSceneSegment'
+if otool -L "$SCENE" | grep -E '/opt/homebrew|/usr/local/opt'; then echo 'Unexpected Homebrew dependency in scene sidecar' >&2; exit 1; fi
+codesign --force --sign - "$SCENE"
 codesign --force --deep --sign - "$BUNDLE"; codesign --verify --deep --strict "$BUNDLE"
 mkdir -p dist; ditto --keepParent -c -k --sequesterRsrc --zlibCompressionLevel 9 "$BUNDLE" dist/KeystoneOFX-macOS-universal.zip
 test -s dist/KeystoneOFX-macOS-universal.zip

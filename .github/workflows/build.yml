@@ -31,6 +31,12 @@ jobs:
             -c src/ColorGradrBridge.cpp -o ColorGradrBridge.o
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror=return-type -Isrc -Igenerated \
             -c src/SceneGrade.cpp -o SceneGrade.o
+      - name: Load-safe OFX smoke test
+        run: |
+          cmake -S . -B build-smoke -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-smoke --parallel 2
+          g++ -std=c++17 tests/ofx_loader_smoke.cpp -ldl -o ofx_loader_smoke
+          ./ofx_loader_smoke build-smoke/KeystoneOFX.ofx
 
   macos-build:
     runs-on: macos-15

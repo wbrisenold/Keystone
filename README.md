@@ -128,5 +128,9 @@ Controls:
 
 The semantic path uses the bundled ADE20K model through a pinned ncnn revision. If the model cannot load, Keystone falls back to a deterministic Lab/position heuristic and reports that in the Scene Grade status field instead of silently changing behavior. Person labels are narrowed with the same chromatic skin test before they are allowed to act as Skin.
 
+### Load-safe scene engine
+
+The inference runtime is **not linked into `KeystoneOFX.ofx`**. The main Resolve plugin keeps the same load-time dependency footprint as the working Keystone base. `KeystoneSceneEngine.dylib` lives in `Contents/Resources` and is opened only when **Analyze Scene** is pressed. If that sidecar, ncnn, or the model cannot be opened, Keystone itself still loads and Scene Grade falls back to its deterministic heuristic path. CI rejects any build where the main OFX gains a hard ncnn/scene-engine dependency.
+
 The scene color decision preserves the source implementation's region mapping, salience/protection rules, subject ranking, duplicate-move removal, and linear multiplicative-versus-additive temperature decision law. The final control landing is Keystone-native: the move is evaluated against Keystone's own AWG4/LogC4 pipeline rather than importing a second grading pipeline.
 

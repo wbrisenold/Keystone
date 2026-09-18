@@ -19,3 +19,11 @@ nm -gU "$CGBIN" | grep -q '_OfxGetPlugin'
 
 codesign --verify --deep --strict "$BUNDLE"
 ARCHS="$(lipo -archs "$BIN")"; [[ " $ARCHS " == *" arm64 "* ]]; [[ " $ARCHS " == *" x86_64 "* ]]
+
+SCENE="$BUNDLE/Contents/Resources/KeystoneSceneEngine.dylib"
+test -f "$SCENE"
+SARCHS="$(lipo -archs "$SCENE")"; [[ " $SARCHS " == *" arm64 "* ]]; [[ " $SARCHS " == *" x86_64 "* ]]
+nm -gU "$SCENE" | grep -q '_KeystoneSceneSegment'
+! otool -L "$BIN" | grep -Ei 'KeystoneSceneEngine|ncnn'
+! otool -L "$SCENE" | grep -E '/opt/homebrew|/usr/local/opt'
+codesign --verify --strict "$SCENE"

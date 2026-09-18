@@ -1,39 +1,40 @@
-# Keystone v1.6 Scene Grade manifest
+# Keystone v1.6.1 Scene Grade Load-Safe manifest
 
-Base repository commit: `7c30c7739de95009c473da5515f0508a1e825ce4`
+Files: 57
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `.github/workflows/build.yml` | 2021 | `ee5466ce096db75d5f18e0c4a49724385cbdbaec7eb8f2ae654c1c589db766a8` |
+| `.github/workflows/build.yml` | 2321 | `1bc7ee5f5c7b3577a2f22db0f9049a2b83772096a456888c87bc7694fe3011ef` |
 | `.gitignore` | 61 | `cb6ffa9fc2f069c5d1d12008a89beb49e79e83d92c5bdb0854f3df0e7faa85cf` |
-| `BUILD_STATUS.md` | 857 | `3050ac5f6f886545c5e1bfa98883d812e124d731c6f76c01d3da46351449558e` |
-| `CMakeLists.txt` | 3174 | `331ef238df0150527944700753878ad7ac4a7256b5168cd2d344fc0f3d21808a` |
+| `BUILD_STATUS.md` | 1449 | `f379289066f38df4ba2ceb71bc0385e6da850fb6a5b4e2bf7fd2935714d5cb81` |
+| `CMakeLists.txt` | 4366 | `f1a49e82b56b262198f2f5dd62622133f021f82027e1eb8b872f5e24e6e24c2f` |
 | `COLORGRADR_NATIVE_ENGINE_AUDIT.md` | 1912 | `b05d6607deb9c88458015082a866cee2c29abe6ac50af1ca49daaa190deda003` |
 | `LICENSE` | 35149 | `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986` |
-| `README.md` | 7229 | `a86ee44053720ffcdd12cc630765759d718ff1dd328fc6065878638012810308` |
-| `RELEASE_NOTES.md` | 4313 | `81a97cd2d62dedc89f121a5f92693e1741400955b872344b4b63d4438366feb7` |
+| `README.md` | 7763 | `9eeddfd3a4b4ea5aeae86bf286f49745f5f5f54f2ddbf7b0c4f46d6236cca85e` |
+| `RELEASE_NOTES.md` | 4948 | `3a3e7e0708230f457b2a99f6ba94f90b6f0ff7939a42ed84ee3376b18426b4f3` |
 | `THIRD_PARTY_NOTICES.md` | 1793 | `602e121f023f6f02b085360f83dd4ef6c8ac78247fe8fa0d873b7564cc63f9f5` |
 | `TONELAB_SKIN_SPEKTRAFILM_UVIR_AUDIT.md` | 1678 | `ae35f2e4a150afd67efe1ffe5f22436215f3bbfe82a3f5a54c33a8576274b02f` |
-| `VALIDATION.md` | 1901 | `66bf92704a771ceec59118255403497da73a82d9cf3438b8e7062633e284bd41` |
-| `ci/source_sanity.py` | 3122 | `6726bd6b74d01ec67cc72d6de229a82531aff1b0642967c4184c5d31aa4757bb` |
-| `ci/validate_bundle_macos.sh` | 1233 | `a5f787563e29f964ca1e802c4e485b87ffadc4a487ec1377ad8006d498fdfe62` |
+| `VALIDATION.md` | 2505 | `3414014553da5ce4da12b0e2d6eb3a8f6130281aac9eb1670c4d6680cb37bb36` |
+| `ci/source_sanity.py` | 3945 | `40c8d5fce623d4794c158f017dc390f353083ebd86f1dc16a6c14a965bd2bcde` |
+| `ci/validate_bundle_macos.sh` | 1617 | `161b859500ee2e15b1aa4f503cd0f5cdf37733fe2a3741e1c6c05963c26c5e6b` |
 | `generated/KeystoneConstants.inc` | 10847 | `e5ac5f49c6cbf7155a6cbc638d07ced7d01c09d31ecf15ae2f413774c7b8727d` |
 | `generated/KeystoneMath.inc` | 60119 | `e65b2de923b4b7912e961e49d440a585b896bb6ee11f62ca8946aa79d040c3c2` |
 | `reference/Keystone-v4_5_11-ReferentOnly.dctl` | 1497017 | `a2e33f95b867ac7d00410962bcbfbfb0696686d210a8e750140d0f33000123f6` |
 | `resources/Referent_LogC4_to_Rec709.cube` | 1401729 | `19b2feb5ed8cb767d980e9f9b351b6e1823a3990974277fdb4a46d1f709d251c` |
 | `resources/SceneModel/ade20k.bin` | 11948632 | `908a6785debbca3502ce11a08462a00504f4718e86c326042fd6b076acf84790` |
 | `resources/SceneModel/ade20k.param` | 42497 | `ba8e532e6357899f7f1fd8deeaf75322ce3f063487602ae32338a415bde569da` |
-| `scripts/build_macos.sh` | 3282 | `3ae66e6907988349ba057f23a56e3572e55a17d828b707345a4fb2efe99e9b92` |
+| `scripts/build_macos.sh` | 4133 | `1ec65b7ed0f62563e5ecb5688c9c183afceb5c6fadf786a61cabfa9f7641c829` |
+| `scripts/diagnose_macos.sh` | 1483 | `833caadcf2ac2baa40fe4ae7f58749aa71af49e89a92384d04dca0c07b9713f5` |
 | `scripts/install_macos.sh` | 387 | `6dfda34f2c94f9c472f2289f18cbacc14ea8d49dcf05fc38eaf8c94d00b7e3d2` |
 | `shaders/KeystoneKernels.metal` | 499 | `0f8427cdf6c33407ec5be6efd1e161eb2a87111879f1dced3e50b1e14c092e49` |
 | `shaders/KeystoneShared.metalh` | 6698 | `d44b77877a1910c46ecdfbc02b9bf4fff712ceef97819bd04710870d538093ea` |
 | `src/ColorGradrBridge.cpp` | 2342 | `472a036e4b0cc8642b2073d0cdac0249507d7d88dbcec7a87ee98652809249fd` |
 | `src/ColorGradrBridge.h` | 258 | `928a3a65b02709aa98554ef9eead2f6894122691a46ef636ca6c4928d586c4e5` |
-| `src/Info.plist.in` | 603 | `9730059cd8a76e74b85d2944f26da61b6ae371badb2906b8350d85ff7da0df88` |
+| `src/Info.plist.in` | 607 | `29f5a0a3e9776c6f795e7e123c589b605a1ea4ecdb39e7c11d7dfd9cc8adbd16` |
 | `src/KeystoneCPU.cpp` | 578 | `f91c1238b1e9d7df0ba159f6c973739a48dac7db2bcd23fc2bfd394380cb0868` |
 | `src/KeystoneCPU.h` | 239 | `bed014a5e9e315bac2fa5d2ddd932dfb52e9e9a334b615abb164fccf1b431d45` |
 | `src/KeystoneCoreCPU.h` | 7875 | `d114f121d3a5cbdd010226ae001aa62d8e274148e602c841c8d4a73e9d32969d` |
-| `src/KeystoneOFX.cpp` | 30877 | `57b14831a045d338f6d08baffb954d6dc8598d40444e052373fe0a1f27cc14a9` |
+| `src/KeystoneOFX.cpp` | 30885 | `fbcb1af9ce6f5210d23345dc70fe7b7e662abb4b54e91195286a8c6010918542` |
 | `src/KeystoneParams.h` | 1446 | `dd2f4f148047a63f98165a032b46de752d06b85aba262ac2686b76cfce030897` |
 | `src/LutLoader.cpp` | 1646 | `77909425d363214cc1638334abe533c82a9c992d1fc3ad069cbf34cd71a007fc` |
 | `src/LutLoader.h` | 231 | `fa8a988d9d536c302f05e0e732d39009048eeb1a77a9c30d657eb1e87e54ab86` |
@@ -42,9 +43,11 @@ Base repository commit: `7c30c7739de95009c473da5515f0508a1e825ce4`
 | `src/NeutralAnalyzer.cpp` | 11357 | `b10a6effe7c674627981679e667a47a4ed482d9fe19a7421e1a5b1ccec5dd32e` |
 | `src/NeutralAnalyzer.h` | 175 | `1e466fbcd3228c5de041983be98c90af706dd7f7a650981dedf59fb31ccb5aa1` |
 | `src/OpenFXMinimal.h` | 8838 | `011aac9d70c1552e88154a35db3b61c2f6838dd6fdc610e9b812d6aed34abb59` |
-| `src/SceneGrade.cpp` | 16042 | `52a240178342c5b5c25eb9874bdb8b20dc33c230184a4e58de6549e8ee71c722` |
+| `src/SceneEngine.cpp` | 4078 | `d127c83e2187cbdcdf7eea3d8a245d23e272ae37732642886fe967c1b6268aa9` |
+| `src/SceneGrade.cpp` | 16499 | `0c34a417a52ae4f269f8327e25f19b7d68f170c9f4d187b7a1eafb16fa900d84` |
 | `src/SceneGrade.h` | 1159 | `5ff4d46d090282e798e972090e4fc930f89a0dab46d89e22eae4e672fb64ee6f` |
 | `tests/keystone_model_tests.cpp` | 3303 | `ede5c23a6403c3e6991fbae12f29215c9b984ad9cb4c38d1e08637fbbe42a914` |
+| `tests/ofx_loader_smoke.cpp` | 1072 | `31efc713048733c3b90cd0dc75976b4b8338e14049651bd57cf81a751f3bd683` |
 | `vendor/ColorGradr/colorgradr.ofx.bundle/Contents/MacOS/colorgradr.ofx` | 3759488 | `b9401e3aac31761fd3f64f5d30e46b807797f8e8f188ff2d5fec0d49e5fd48c3` |
 | `vendor/ColorGradr/colorgradr.ofx.bundle/Contents/Resources/Cubes/Cold_Fix_1.cube` | 881281 | `8d05c97632c04c54f6dbcab82ba367f35144e1f44e2cebad6f4ff7ec868f0ddb` |
 | `vendor/ColorGradr/colorgradr.ofx.bundle/Contents/Resources/Cubes/Fashion_Filter_1.cube` | 970735 | `ddc6d8347259ccfde13288e69f7548122ca4bc090ffa3383d5b66254f5bcc022` |

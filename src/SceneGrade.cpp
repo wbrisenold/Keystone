@@ -12,9 +12,6 @@
 #ifdef __APPLE__
 #include <dlfcn.h>
 #endif
-#ifdef KEYSTONE_HAS_NCNN
-#include <net.h>
-#endif
 
 namespace keystone {
 namespace {
@@ -73,17 +70,61 @@ static std::string sceneModelDir(){
   return "resources/SceneModel";
 }
 
-#ifdef KEYSTONE_HAS_NCNN
-class Segmenter {
- public:
-  bool ensure(){std::lock_guard<std::mutex> l(mu_);if(tried_)return ready_;tried_=true;net_.opt.use_vulkan_compute=false;net_.opt.num_threads=1;net_.opt.lightmode=true;std::string d=sceneModelDir();ready_=net_.load_param((d+"/ade20k.param").c_str())==0&&net_.load_model((d+"/ade20k.bin").c_str())==0;return ready_;}
-  bool run(const unsigned char* rgb,int w,int h,std::vector<unsigned char>& regions,int& ow,int& oh){if(!ensure())return false;const float mean[3]={0.485f*255.f,0.456f*255.f,0.406f*255.f};const float norm[3]={1.f/(0.229f*255.f),1.f/(0.224f*255.f),1.f/(0.225f*255.f)};ncnn::Mat in=ncnn::Mat::from_pixels_resize(rgb,ncnn::Mat::PIXEL_RGB,w,h,512,512);in.substract_mean_normalize(mean,norm);ncnn::Extractor ex=net_.create_extractor();if(ex.input("in0",in)!=0)return false;ncnn::Mat o;if(ex.extract("out0",o)!=0||o.w<=0||o.h<=0||o.c<2)return false;int step=std::max(1,std::max(o.w,o.h)/256);ow=(o.w+step-1)/step;oh=(o.h+step-1)/step;regions.assign((size_t)ow*oh,(unsigned char)SceneOther);int classes=std::min(o.c,150);for(int y=0;y<oh;++y){int sy=std::min(o.h-1,y*step);for(int x=0;x<ow;++x){int sx=std::min(o.w-1,x*step),best=0;float bv=-1e30f;for(int c=0;c<classes;++c){float v=o.channel(c).row(sy)[sx];if(v>bv){bv=v;best=c;}}regions[(size_t)y*ow+x]=kAdeToRegion[best];}}return true;}
- private: ncnn::Net net_;std::mutex mu_;bool tried_=false,ready_=false;
-};
-static Segmenter& segmenter(){static Segmenter s;return s;}
-#else
-static bool noModel(){return false;}
+// The semantic inference runtime is intentionally NOT linked into the main OFX.
+// Resolve must be able to load Keystone even if the optional scene engine or model is missing.
+// The sidecar is opened lazily only when Analyze Scene is pressed.
+using SceneSegmentFn = int (*)(const unsigned char*, int, int, const char*, unsigned char*, int, int*, int*);
+
+static std::string sceneEnginePath(){
+#ifdef __APPLE__
+  Dl_info info{};
+  if(dladdr((const void*)&sceneEnginePath,&info)&&info.dli_fname){
+    std::string p=info.dli_fname;
+    auto s=p.find_last_of('/');
+    if(s!=std::string::npos){
+      p=p.substr(0,s); // .../Contents/MacOS
+      s=p.find_last_of('/');
+      if(s!=std::string::npos)return p.substr(0,s)+"/Resources/KeystoneSceneEngine.dylib";
+    }
+  }
 #endif
+  return "KeystoneSceneEngine.dylib";
+}
+
+static bool runSemanticSidecar(const unsigned char* rgb,int w,int h,
+                               std::vector<unsigned char>& regions,int& ow,int& oh){
+#ifdef __APPLE__
+  struct LazyEngine {
+    void* handle=nullptr;
+    SceneSegmentFn fn=nullptr;
+    bool tried=false;
+    std::mutex mu;
+  };
+  static LazyEngine e;
+  {
+    std::lock_guard<std::mutex> lock(e.mu);
+    if(!e.tried){
+      e.tried=true;
+      e.handle=dlopen(sceneEnginePath().c_str(),RTLD_LAZY|RTLD_LOCAL);
+      if(e.handle)e.fn=reinterpret_cast<SceneSegmentFn>(dlsym(e.handle,"KeystoneSceneSegment"));
+    }
+  }
+  if(!e.fn||!rgb||w<=0||h<=0)return false;
+  // The sidecar caps its label map at 256x256. This buffer is deliberately fixed so
+  // a malformed sidecar cannot ask the host plugin to allocate an arbitrary size.
+  regions.assign(256u*256u,(unsigned char)SceneOther);
+  int rw=0,rh=0;
+  const std::string md=sceneModelDir();
+  const int ok=e.fn(rgb,w,h,md.c_str(),regions.data(),(int)regions.size(),&rw,&rh);
+  if(!ok||rw<=0||rh<=0||(size_t)rw*(size_t)rh>regions.size()){
+    regions.clear();ow=oh=0;return false;
+  }
+  ow=rw;oh=rh;regions.resize((size_t)ow*(size_t)oh);return true;
+#else
+  (void)rgb;(void)w;(void)h;(void)regions;(void)ow;(void)oh;
+  return false;
+#endif
+}
 
 static Params analysisParams(const Params& in){Params p=in;p.neutralAmount=0.0f;p.neutralGainR=p.neutralGainG=p.neutralGainB=1.0f;p.matchSlopeR=p.matchSlopeG=p.matchSlopeB=1.0f;p.matchOffsetR=p.matchOffsetG=p.matchOffsetB=0.0f;p.sceneGainTemp=p.sceneOffsetTemp=p.sceneExposure=p.sceneShadows=p.sceneHighlights=0.0f;p.skinShowMask=0;return p;}
 static float3 render(const Sample& s,const Params& p,const std::vector<LutEntry>& lut){return keystone_cpu::processPixel(make_float3(s.r,s.g,s.b),p,lut.data());}
@@ -113,9 +154,7 @@ static void solveTone(const std::vector<Sample>& s,const Choice& c,const Params&
 
 static bool buildSamples(const float* rgba,int w,int h,int stride,const Params& p,const std::vector<LutEntry>& lut,std::vector<Sample>& samples,std::vector<unsigned char>& thumb,bool& modelReady){if(!rgba||w<=0||h<=0||stride<w*4||lut.size()!=35937)return false;const int T=512;thumb.assign((size_t)T*T*3,0);for(int ty=0;ty<T;++ty){int sy=h-1-(int)((long long)ty*h/T);sy=std::max(0,std::min(h-1,sy));for(int tx=0;tx<T;++tx){int sx=(int)((long long)tx*w/T);sx=std::max(0,std::min(w-1,sx));const float* q=rgba+(size_t)sy*stride+sx*4;Sample z;z.r=q[0];z.g=q[1];z.b=q[2];float3 d=render(z,p,lut);size_t o=((size_t)ty*T+tx)*3;thumb[o]=(unsigned char)std::lround(clampf(d.x,0,1)*255);thumb[o+1]=(unsigned char)std::lround(clampf(d.y,0,1)*255);thumb[o+2]=(unsigned char)std::lround(clampf(d.z,0,1)*255);}}
   std::vector<unsigned char> mask;int mw=0,mh=0;modelReady=false;
-#ifdef KEYSTONE_HAS_NCNN
-  modelReady=segmenter().run(thumb.data(),T,T,mask,mw,mh);
-#endif
+  modelReady=runSemanticSidecar(thumb.data(),T,T,mask,mw,mh);
   int step=std::max(1,(int)std::sqrt((double)w*h/25000.0));samples.clear();samples.reserve((size_t)((w+step-1)/step)*((h+step-1)/step));double meanL=0;std::vector<float> ls;
   for(int y=0;y<h;y+=step)for(int x=0;x<w;x+=step){const float* q=rgba+(size_t)y*stride+x*4;Sample z;z.r=q[0];z.g=q[1];z.b=q[2];z.u=(float)x/(float)w;z.v=(float)y/(float)h;z.band=(uint8_t)std::min(2,std::max(0,(int)((long long)y*3/h)));float3 d=render(z,p,lut);float L,a,b;rgbToLab(d.x,d.y,d.z,L,a,b);ls.push_back(L);meanL+=L;z.skin=skinChroma(d.x,d.y,d.z)?1:0;if(modelReady){int mx=std::min(mw-1,std::max(0,(int)(z.u*mw)));int my=std::min(mh-1,std::max(0,(int)((1.0f-z.v)*mh)));z.region=mask[(size_t)my*mw+mx];if(z.region==SceneSkin&&!z.skin)z.region=SceneOther;}samples.push_back(z);}if(samples.empty())return false;meanL/=samples.size();if(!modelReady){for(size_t i=0;i<samples.size();++i){Sample& z=samples[i];float3 d=render(z,p,lut);float L,a,b;rgbToLab(d.x,d.y,d.z,L,a,b);if(z.skin)z.region=SceneSkin;else if(z.band==2&&L>meanL)z.region=SceneSky;else if(b<-6&&L<meanL)z.region=SceneWater;else if(a<-5&&b>0)z.region=SceneFoliage;else if(L<meanL)z.region=SceneTerrain;else z.region=SceneBuilt;}}return true;}
 }
